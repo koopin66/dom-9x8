@@ -74,6 +74,7 @@ main{display:flex;flex-direction:column;gap:28px;padding-block:28px 60px}
 .fac h3 span{font-size:13px;font-weight:500;color:var(--ink-2)}
 
 /* 3D */
+.viewer [hidden]{display:none!important}
 .viewer{position:relative;height:clamp(340px,58vw,620px);background:var(--sky);border:1px solid var(--rule);overflow:hidden}
 .viewer canvas{display:block;width:100%;height:100%;cursor:grab}
 .viewer canvas:active{cursor:grabbing}
@@ -188,7 +189,10 @@ for(const x of [300,3875])op('south',x,x+900,0,2100,'door');
 for(const w of ['upper1','upper2'])op(w,3825,4725,2900,5000,'door');
 op('ridge',3075,4175,0,2100,'open');op('ridge',3450,4250,4950,5650);
 op('front',2300,3200,0,2100,'door');op('front',4275,4775,1550,2050);
-for(const w of ['front','back'])op(w,2975,4575,3400,x=>5200+(x-2975)*2071/5075);
+// A level sill, a raked head over the low sash and a short level head over the high sash.
+const rakeCorner=4075;
+const bedroomHead=x=>5500+Math.min(x-rakeCorner,0)*2071/5075;
+for(const w of ['front','back'])op(w,2975,4575,3700,bedroomHead);
 op('back',2975,4575,300,2100);op('kb',6075,8075,0,2100,'slide');
 for(const y of [550,3350])op('right',y,y+1600,300,2100);
 op('left',1425,1925,1550,2050);op('left',3463,4463,300,2100);op('left',6000,6500,1550,2050);
@@ -203,6 +207,7 @@ function init3D(){
   try{renderer=new THREE.WebGLRenderer({antialias:true});}catch(e){msg.hidden=false;return;}
   renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
   renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+  renderer.outputEncoding=THREE.sRGBEncoding;
   const clip=new THREE.Plane(new THREE.Vector3(0,-1,0),1000); renderer.clippingPlanes=[clip];
   host.appendChild(renderer.domElement);
   const scene=new THREE.Scene();
@@ -210,9 +215,16 @@ function init3D(){
   const roofG=new THREE.Group(); root.add(roofG);
   const M=(c,o)=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:.85,metalness:0},o||{}));
   const mat={wall:M(0x64625e),wallIn:M(0xefebe3),roof:M(0x3d464b,{roughness:.55,metalness:.25}),seam:M(0x4d575c,{roughness:.5,metalness:.3}),
-    plinth:M(0x8f9395),deck:M(0xa47750),wood:M(0x8a603f),glass:M(0x9cc0d2,{transparent:true,opacity:.42,roughness:.08,metalness:.2}),
-    frame:M(0xeeeae3,{roughness:.6}),door:M(0x6b4a31),doorIn:M(0xe7dfd2),slab:M(0xcfc8ba),floor:M(0xcbb08a),ground:M(0x95a57c,{roughness:1}),
+    plinth:M(0x8f9395),deck:M(0xa47750),wood:M(0x8a603f),glass:M(0x91a4b1,{transparent:true,opacity:.83,roughness:.24,metalness:.12}),
+    sash:M(0x8e989a),frame:M(0xf3f1e9,{roughness:.6}),door:M(0x6b4a31),doorIn:M(0xe7dfd2),slab:M(0xcfc8ba),floor:M(0xcbb08a),ground:M(0xa6aa98,{roughness:1}),
     stair:M(0xb4895c),furn:M(0xc8c2b6),soft:M(0x8796a1),dark:M(0x5c6468)};
+  // Continuous courses across wall pieces and around openings (local vertical units: mm).
+  mat.wall.onBeforeCompile=shader=>{
+    shader.vertexShader='varying float courseHeight;\n'+shader.vertexShader.replace('#include <begin_vertex>','#include <begin_vertex>\ncourseHeight=position.y;');
+    shader.fragmentShader='varying float courseHeight;\n'+shader.fragmentShader.replace('#include <color_fragment>',
+      '#include <color_fragment>\nfloat h=mod(courseHeight,190.0); diffuseColor.rgb*=mix(.74,1.0,smoothstep(0.0,8.0,h))*(1.0+.035*(1.0-h/190.0));');
+  };
+  Object.values(mat).forEach(material=>material.color.convertSRGBToLinear());
   const edgeMat=new THREE.LineBasicMaterial({color:0x232b2f,transparent:true,opacity:.3});
   function add(mesh,parent,edges,shadow){
     parent=parent||root; mesh.castShadow=shadow!==false; mesh.receiveShadow=true; parent.add(mesh);
@@ -227,9 +239,9 @@ function init3D(){
   for(const w of WALLS){
     const ax=wallAxis(w), {along,u0,u1,t0,t1}=ax, tc=(t0+t1)/2;
     const ops=OPEN.filter(o=>o.w===w.id).map(o=>Object.assign({},o,{S:K(o.s),H:K(o.h)}));
-    const bp=[...new Set([u0,u1,...ops.flatMap(o=>[o.a,o.b])])].sort((a,b)=>a-b);
+    const bp=[...new Set([u0,u1,...ops.flatMap(o=>o.h===bedroomHead?[o.a,rakeCorner,o.b]:[o.a,o.b])])].sort((a,b)=>a-b);
     const wm=w.ext?mat.wall:mat.wallIn;
-    const piece=(p,q,Lo,Up)=>{if(Up(p)-Lo(p)<2&&Up(q)-Lo(q)<2) return; add(place(prism([[p,Lo(p)],[q,Lo(q)],[q,Up(q)],[p,Up(p)]],t1-t0,wm),along,t0,t1));};
+    const piece=(p,q,Lo,Up)=>{if(Up(p)-Lo(p)<2&&Up(q)-Lo(q)<2) return; add(place(prism([[p,Lo(p)],[q,Lo(q)],[q,Up(q)],[p,Up(p)]],t1-t0,wm),along,t0,t1),root,false);};
     for(let i=0;i<bp.length-1;i++){
       const p=bp[i],q=bp[i+1],m=(p+q)/2;
       const cov=ops.filter(o=>o.a<=p+1&&o.b>=q-1).sort((a,b)=>a.S(m)-b.S(m));
@@ -238,13 +250,38 @@ function init3D(){
     ops.forEach(o=>{
       const pts=[[o.a,o.S(o.a)],[o.b,o.S(o.b)],[o.b,o.H(o.b)],[o.a,o.H(o.a)]];
       if(o.t==='win'||o.t==='slide'){
-        const i=60, inner=[[o.a+i,o.S(o.a+i)+i],[o.b-i,o.S(o.b-i)+i],[o.b-i,o.H(o.b-i)-i],[o.a+i,o.H(o.a+i)-i]];
-        const sh=shape(pts), hole=new THREE.Path(); inner.forEach((p,k)=>k?hole.lineTo(p[0],p[1]):hole.moveTo(p[0],p[1])); sh.holes.push(hole);
-        add(place(new THREE.Mesh(new THREE.ExtrudeGeometry(sh,{depth:70,bevelEnabled:false}),mat.frame),along,tc-35,tc+35),root,false);
-        add(place(prism(inner,16,mat.glass),along,tc-8,tc+8),root,false,false);
-        if(o.b-o.a>=1100){const m=(o.a+o.b)/2; add(place(prism([[m-30,o.S(m)+i],[m+30,o.S(m)+i],[m+30,o.H(m)-i],[m-30,o.H(m)-i]],70,mat.frame),along,tc-35,tc+35),root,false);}
+        const sign=['left','front','kf'].includes(w.id)?-1:1;
+        const face=sign<0?t0:t1;
+        const center=face-sign*43;
+        const corners=o.h===bedroomHead?[rakeCorner]:[];
+        function polygon(a,b,bottom,top){
+          return [[a,bottom],[b,bottom],...[a,...corners.filter(x=>x>a&&x<b),b].reverse().map(x=>[x,top(x)])];
+        }
+        function profile(points,depth,offset,material){
+          add(place(prism(points,depth,material),along,offset-depth/2,offset+depth/2),root,false);
+        }
+        function ring(outer,inner,depth,offset,material){
+          const outline=shape(outer), hole=new THREE.Path();
+          inner.slice().reverse().forEach(([x,y],i)=>i?hole.lineTo(x,y):hole.moveTo(x,y));
+          outline.holes.push(hole);
+          const frame=new THREE.Mesh(new THREE.ExtrudeGeometry(outline,{depth,bevelEnabled:false}),material);
+          add(place(frame,along,offset-depth/2,offset+depth/2),root,false);
+        }
+        const sill=o.S(o.a), casing=o.t==='slide'?62:52;
+        const cut=polygon(o.a,o.b,sill,o.H);
+        ring(polygon(o.a-casing,o.b+casing,sill-(o.t==='slide'?8:44),x=>o.H(x)+casing),cut,22,face+sign*11,mat.frame);
+        const clear=polygon(o.a+45,o.b-45,sill+45,x=>o.H(x)-45);
+        ring(cut,clear,68,center,mat.frame);
+        const divisions=o.t==='slide'?3:o.b-o.a>=1500?2:1;
+        const width=(o.b-o.a-90)/divisions;
+        for(let k=0;k<divisions;k++){
+          const a=o.a+45+k*width,b=a+width;
+          const pane=polygon(a+21,b-21,sill+67,x=>o.H(x)-67);
+          ring(polygon(a,b,sill+45,x=>o.H(x)-45),pane,32,center+sign*14,mat.sash);
+          profile(pane,12,center,mat.glass);
+        }
       } else if(o.t==='door'){
-        add(place(prism(pts,44,o.ext?mat.door:mat.doorIn),along,tc-22,tc+22),root,false);
+        add(place(prism(pts,44,w.ext?mat.frame:mat.doorIn),along,tc-22,tc+22),root,false);
       }
     });
   }
@@ -259,7 +296,14 @@ function init3D(){
   solid(3625,3250,2700,4925,4675,2900,mat.slab);
   solid(150,3250,2700,3625,3860,2900,mat.slab);
   for(let i=0;i<14;i++){const x=1375+i*225,z=(i+1)*2900/15;solid(x,3860,z-55,x+225,4675,z,mat.stair);}
-  function roof(a,b,fn){const r=prism([[a,fn(a)],[b,fn(b)],[b,fn(b)+250],[a,fn(a)+250]],8600,mat.roof);r.position.z=-300;add(r,roofG);}
+  function roof(a,b,fn){
+    function layer(lo,hi,m,overhang){
+      const section=[[a,fn(a)+lo],[b,fn(b)+lo],[b,fn(b)+hi],[a,fn(a)+hi]];
+      const panel=prism(section,8000+2*overhang,m);panel.position.z=-overhang;add(panel,roofG,false);
+    }
+    layer(0,205,mat.frame,300);
+    layer(205,250,mat.roof,310);
+  }
   roof(-400,5400,high);roof(5075,9400,low);
   for(const [x,y] of [[5980,7850],[6980,7850],[8850,7850],[8850,7100]])solid(x,y,-25,x+150,y+150,low(x),mat.frame);
   solid(2100,-1200,-350,3500,0,0,mat.deck);
@@ -273,7 +317,7 @@ function init3D(){
   sun.castShadow=true; sun.shadow.mapSize.set(2048,2048); Object.assign(sun.shadow.camera,{left:-13,right:13,top:13,bottom:-13,near:1,far:60}); sun.shadow.bias=-0.0006;
 
   const camera=new THREE.PerspectiveCamera(34,1,0.1,300);
-  camera.position.set(19,9.5,19.5);
+  camera.position.set(15.8,6.1,19.2);
   const target=new THREE.Vector3(4.5,2.1,4.0);
   const render=()=>renderer.render(scene,camera);
   let controls=null;
@@ -286,7 +330,7 @@ function init3D(){
   new MutationObserver(bg).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
   bg(); resize();
 
-  const views={all:[19,9.5,19.5,2.1],open:[16,15,17,1.8],f2:[13,15,14,3],f1:[12,15,13,0.4]};
+  const views={all:[15.8,6.1,19.2,2.1],open:[16,15,17,1.8],f2:[13,15,14,3],f1:[12,15,13,0.4]};
   document.querySelectorAll('.seg button').forEach(btn=>btn.addEventListener('click',()=>{
     const m=btn.dataset.mode;
     document.querySelectorAll('.seg button').forEach(b=>b.setAttribute('aria-pressed',String(b===btn)));
