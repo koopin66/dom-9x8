@@ -25,9 +25,10 @@ global.createHouseView=function(host,onSelect){
   const render=()=>renderer.render(scene,camera);
   controls.addEventListener('change',render);
   const M=(c,o)=>new THREE.MeshStandardMaterial(Object.assign({color:c,roughness:.85,metalness:0},o||{}));
-  const mat={wall:M(0x64625e),wallIn:M(0xefebe3),roof:M(0x3d464b,{roughness:.55,metalness:.25}),seam:M(0x4d575c,{roughness:.5,metalness:.3}),
-    plinth:M(0x8f9395),deck:M(0xa47750),wood:M(0x8a603f),glass:M(0x91a4b1,{transparent:true,opacity:.83,roughness:.24,metalness:.12}),
-    sash:M(0x8e989a),frame:M(0xf3f1e9,{roughness:.6}),door:M(0x6b4a31),doorIn:M(0xe7dfd2),slab:M(0xcfc8ba),floor:M(0xcbb08a),ground:M(0xa6aa98,{roughness:1}),
+  const C=H.defaultColors;
+  const mat={wall:M(C.facade),wallIn:M(0xefebe3),roof:M(C.roof,{roughness:.55,metalness:.25}),seam:M(C.roof,{roughness:.5,metalness:.3}),
+    plinth:M(C.foundation),deck:M(0xa47750),wood:M(0x8a603f),glass:M(0x91a4b1,{transparent:true,opacity:.83,roughness:.24,metalness:.12}),
+    sash:M(C.windowFrames),frame:M(C.windowFrames,{roughness:.6}),door:M(C.entranceDoor),column:M(C.columns,{roughness:.6}),roofUnder:M(C.roof,{roughness:.6}),doorIn:M(0xe7dfd2),slab:M(0xcfc8ba),floor:M(0xcbb08a),ground:M(0xa6aa98,{roughness:1}),
     stair:M(0xb4895c),furn:M(0xc8c2b6),soft:M(0x8796a1),dark:M(0x5c6468)};
   // Continuous courses across wall pieces and around openings (local vertical units: mm).
   mat.wall.onBeforeCompile=shader=>{
@@ -64,6 +65,9 @@ global.createHouseView=function(host,onSelect){
   }
   function update(model){
     select(null);
+    const colors=H.colorSettings(model);
+    for(const [material,key] of Object.entries({wall:'facade',roof:'roof',roofUnder:'roof',seam:'roof',plinth:'foundation',sash:'windowFrames',frame:'windowFrames',door:'entranceDoor',column:'columns'}))
+      mat[material].color.set(colors[key]).convertSRGBToLinear();
     if(root)disposeGroup(root);
     const previous=currentModel?.house;
     if(previous&&(previous.width!==model.house.width||previous.depth!==model.house.depth)){
@@ -132,7 +136,7 @@ global.createHouseView=function(host,onSelect){
           profile(pane,Math.min(12,thickness*.2),center,mat.glass);
         }
       } else if(o.t==='door'){
-        add(place(prism(pts,44,w.ext?mat.frame:mat.doorIn),along,tc-22,tc+22),root,false);
+        add(place(prism(pts,44,w.ext?mat.door:mat.doorIn),along,tc-22,tc+22),root,false);
       }
     });
   }
@@ -140,7 +144,7 @@ global.createHouseView=function(host,onSelect){
 
     entity=null;
     function solid(x,y,z,X,Y,Z,m,parent){
-      if(X>x&&Y>y&&Z>z)add(box(x,y,z,X,Y,Z,m),parent,false);
+      if(X>x&&Y>y&&Z>z)return add(box(x,y,z,X,Y,Z,m),parent,false);
     }
     solid(0,0,-h.base,h.split,h.depth,0,mat.plinth);
     solid(h.split,0,-h.base,h.width,h.kitchenDepth,0,mat.plinth);
@@ -168,14 +172,16 @@ global.createHouseView=function(host,onSelect){
         const panel=prism([[a,fn(a)+lo],[b,fn(b)+lo],[b,fn(b)+hi],[a,fn(a)+hi]],depth,material);
         panel.position.z=-h.overhang;add(panel,roofG,false);
       };
-      layer(0,h.roofThickness*.82,mat.frame);layer(h.roofThickness*.82,h.roofThickness,mat.roof);
+      layer(0,h.roofThickness*.82,mat.roofUnder);layer(h.roofThickness*.82,h.roofThickness,mat.roof);
     }
     roof(-h.overhang,h.split+h.overhang,high);roof(h.split,h.width+h.overhang,low);
     const right=h.width-150,back=h.depth-150;
     for(const [x,y] of [[h.split+(h.width-h.split)*.49,back],[right,back]])
-      solid(x,y,25-h.terraceDrop,x+150,y+150,low(x),mat.frame);
+      solid(x,y,25-h.terraceDrop,x+150,y+150,low(x),mat.column);
     entity={type:'porch',id:'porch'};
-    solid(p.x,-p.depth,-h.base,p.x+p.width,0,0,mat.deck);
+    const porchBase=solid(p.x,-p.depth,-h.base,p.x+p.width,0,-25,mat.plinth);
+    porchBase.userData.part='porch-foundation';
+    solid(p.x,-p.depth,-25,p.x+p.width,0,0,mat.deck);
     const canopy=H.porchRoofGeometry(model);
     const roofPanel=prism([[canopy.y1,canopy.bottom(canopy.y1)],[canopy.y2,canopy.bottom(canopy.y2)],
       [canopy.y2,canopy.top(canopy.y2)],[canopy.y1,canopy.top(canopy.y1)]],canopy.x2-canopy.x1,mat.roof);
@@ -183,7 +189,7 @@ global.createHouseView=function(host,onSelect){
     add(place(roofPanel,'Y',canopy.x1,canopy.x2),roofG,false);
     for(const x of [canopy.postLeft,canopy.postRight]){
       const y=canopy.postY;
-      const post=prism([[y,0],[y+100,0],[y+100,canopy.bottom(y+100)],[y,canopy.bottom(y)]],100,mat.frame);
+      const post=prism([[y,0],[y+100,0],[y+100,canopy.bottom(y+100)],[y,canopy.bottom(y)]],100,mat.column);
       post.userData.part='porch-post';add(place(post,'Y',x,x+100),root,false);
     }
     entity=null;

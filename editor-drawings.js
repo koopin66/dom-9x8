@@ -3,7 +3,7 @@
   const H=global.HouseModel;
   const esc=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const fmt=n=>Math.round(n).toLocaleString('ru-RU');
-  const css=`.wall{fill:#d9dfdc;stroke:#354640;stroke-width:1.2}.selected{fill:#b5e2d7;stroke:#147d69;stroke-width:2}.opening{fill:#e6f1f5;stroke:#48798a;stroke-width:1.4}.door{fill:#fff;stroke:#9a754c;stroke-width:1.4}.fine{fill:none;stroke:#889790;stroke-width:.7}.canopy{fill:none;stroke:#53615d;stroke-width:1;stroke-dasharray:6 4}.canopy.selected{stroke:#147d69;stroke-width:2}.porch-post{fill:#f3f1e9;stroke:#8b9992;stroke-width:.7}.roof{fill:#d7dddd;stroke:#53615d;stroke-width:1}.floor{fill:#f0eee8;stroke:#a8afa9;stroke-width:1}.dim{fill:none;stroke:#647970;stroke-width:.7}.accent{fill:none;stroke:#147d69;stroke-width:1.5}text{font-family:system-ui,sans-serif;fill:#354640;font-size:180px} .dimension{font-size:185px;paint-order:stroke;stroke:#fff;stroke-width:65px;stroke-linejoin:round}.label{font-size:150px}.room-name{paint-order:stroke;stroke:#f0eee8;stroke-width:45px;stroke-linejoin:round}.room-area{font-size:175px;font-weight:600;fill:#147d69;paint-order:stroke;stroke:#f0eee8;stroke-width:40px}.room-size{font-size:145px;paint-order:stroke;stroke:#fff;stroke-width:45px;stroke-linejoin:round}.room-dim{fill:none;stroke:#75877f;stroke-width:.6}.hit{cursor:pointer}path,line,rect,polygon{vector-effect:non-scaling-stroke}.hit:focus{outline:none;stroke:#147d69;stroke-width:3}`;
+  const css=`.wall{fill:#d9dfdc;stroke:#354640;stroke-width:1.2}.selected{fill:#b5e2d7;stroke:#147d69;stroke-width:2}.opening{fill:#e6f1f5;stroke:#48798a;stroke-width:1.4}.door{fill:#fff;stroke:#9a754c;stroke-width:1.4}.fine{fill:none;stroke:#889790;stroke-width:.7}.canopy{fill:none;stroke:#53615d;stroke-width:1;stroke-dasharray:6 4}.canopy.selected{stroke:#147d69;stroke-width:2}.porch-post{fill:#f3f1e9;stroke:#8b9992;stroke-width:.7}.roof{fill:#d7dddd;stroke:#53615d;stroke-width:1}.plinth{fill:#8f9395;stroke:#53615d;stroke-width:1}.floor{fill:#f0eee8;stroke:#a8afa9;stroke-width:1}.dim{fill:none;stroke:#647970;stroke-width:.7}.accent{fill:none;stroke:#147d69;stroke-width:1.5}text{font-family:system-ui,sans-serif;fill:#354640;font-size:180px} .dimension{font-size:185px;paint-order:stroke;stroke:#fff;stroke-width:65px;stroke-linejoin:round}.label{font-size:150px}.room-name{paint-order:stroke;stroke:#f0eee8;stroke-width:45px;stroke-linejoin:round}.room-area{font-size:175px;font-weight:600;fill:#147d69;paint-order:stroke;stroke:#f0eee8;stroke-width:40px}.room-size{font-size:145px;paint-order:stroke;stroke:#fff;stroke-width:45px;stroke-linejoin:round}.room-dim{fill:none;stroke:#75877f;stroke-width:.6}.hit{cursor:pointer}path,line,rect,polygon{vector-effect:non-scaling-stroke}.hit:focus{outline:none;stroke:#147d69;stroke-width:3}`;
   const line=(x1,y1,x2,y2,cls='fine')=>`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="${cls}"/>`;
   const rect=(x,y,w,h,cls,extra='')=>`<rect x="${x}" y="${y}" width="${Math.max(0,w)}" height="${Math.max(0,h)}" class="${cls}" ${extra}/>`;
   const text=(x,y,value,cls='label',extra='')=>`<text x="${x}" y="${y}" text-anchor="middle" class="${cls}" ${extra}>${esc(value)}</text>`;
@@ -111,13 +111,13 @@
     const r=H.porchRoofGeometry(m),p=m.porch,selected=selection?.type==='porch'?'selected':'';
     let out=`<g class="hit" ${attr('porch',{id:'porch',name:'Крыльцо и крыша входа'})}>`;
     if(view==='front'){
-      out+=rect(p.x,0,p.width,m.house.base,'floor');
+      out+=rect(p.x,25,p.width,m.house.base-25,'plinth')+rect(p.x,0,p.width,25,'floor');
       for(const x of [r.postLeft,r.postRight])out+=rect(x,-r.bottom(r.postY+100),100,r.bottom(r.postY+100),'porch-post');
       out+=rect(r.x1,-r.top(r.y2),r.x2-r.x1,r.top(r.y2)-r.bottom(r.y1),`roof ${selected}`);
       out+=line(r.x1,-r.top(r.y1),r.x2,-r.top(r.y1));
       out+=text((r.x1+r.x2)/2,-r.top(r.y2)-120,`Козырёк ${r.p.roofAngle}°`);
     }else{
-      out+=rect(-p.depth,0,p.depth,m.house.base,'floor');
+      out+=rect(-p.depth,25,p.depth,m.house.base-25,'plinth')+rect(-p.depth,0,p.depth,25,'floor');
       const y=r.postY;
       out+=poly([[y,0],[y+100,0],[y+100,-r.bottom(y+100)],[y,-r.bottom(y)]],'porch-post');
       out+=poly([[r.y1,-r.bottom(r.y1)],[r.y2,-r.bottom(r.y2)],[r.y2,-r.top(r.y2)],[r.y1,-r.top(r.y1)]],`roof ${selected}`,`data-porch-roof-angle="${r.p.roofAngle}"`);
@@ -145,20 +145,20 @@
       for(const o of m.openings.filter(o=>o.wallId===id)){
         const g=H.openingGeometry(m,o);
         const shape=[[g.a,g.sill],[g.b,g.sill],...[g.a,...g.corners,g.b].reverse().map(u=>[u,g.head(u)])];
-        out+=poly(shape.map(p=>elevationPoint(...p)),`${o.kind==='door'?'door':'opening'} hit ${chosen(selection,'opening',o.id)?'selected':''}`,attr('opening',o));
-        if(o.kind==='window'||o.kind==='glazedDoor')for(let i=1;i<o.panels;i++){const u=g.a+o.width*i/o.panels;out+=line(u,-g.sill,u,-g.head(u));}
+        out+=poly(shape.map(p=>elevationPoint(...p)),`${o.kind==='door'?'door exterior-door':'opening exterior-window'} hit ${chosen(selection,'opening',o.id)?'selected':''}`,attr('opening',o));
+        if(o.kind==='window'||o.kind==='glazedDoor')for(let i=1;i<o.panels;i++){const u=g.a+o.width*i/o.panels;out+=line(u,-g.sill,u,-g.head(u),'exterior-sash');}
         out+=text((g.a+g.b)/2,-g.sill-90,`${fmt(o.width)} × ${fmt(o.height)}`,'dimension');
       }
     }
     if(view==='front'||view==='back'){
       for(const [a,b,fn] of [[-h.overhang,h.split+h.overhang,x=>H.mainTop(m,x)],[h.split,h.width+h.overhang,x=>H.lowTop(m,x)]])
         out+=poly([[a,fn(a)],[b,fn(b)],[b,fn(b)+h.roofThickness],[a,fn(a)+h.roofThickness]].map(p=>elevationPoint(...p)),'roof');
-      out+=rect(0,0,h.split,h.base,'floor')+rect(h.split,view==='back'?h.terraceDrop:0,h.width-h.split,h.base-(view==='back'?h.terraceDrop:0),'floor');
+      out+=rect(0,0,h.split,h.base,'plinth')+rect(h.split,view==='back'?h.terraceDrop:0,h.width-h.split,h.base-(view==='back'?h.terraceDrop:0),'plinth');
     }else{
       out+=rect(-h.overhang,-top-h.roofThickness,h.depth+2*h.overhang,view==='left'?top-H.mainTop(m,0)+h.roofThickness:h.roofThickness,'roof');
       if(view==='right')out+=rect(-h.overhang,-H.lowTop(m,h.split)-h.roofThickness,h.depth+2*h.overhang,H.lowTop(m,h.split)-H.lowTop(m,h.width)+h.roofThickness,'roof');
-      out+=rect(0,0,view==='right'?h.kitchenDepth:width,h.base,'floor');
-      if(view==='right')out+=rect(h.kitchenDepth,h.terraceDrop,h.depth-h.kitchenDepth,h.base-h.terraceDrop,'floor');
+      out+=rect(0,0,view==='right'?h.kitchenDepth:width,h.base,'plinth');
+      if(view==='right')out+=rect(h.kitchenDepth,h.terraceDrop,h.depth-h.kitchenDepth,h.base-h.terraceDrop,'plinth');
     }
     out+=porchElevation(m,view,selection);
     out+=dimX(0,width,h.base+450,h.base)+dimY(-top,0,-600,0,fmt(top));
@@ -189,8 +189,10 @@
     const minY=planView?Math.min(-m.porch.depth,r.y1)-1050:-roofMax-600;
     const maxY=planView?h.depth+1650:h.base+1300;
     const box=[minX,minY,maxX-minX,maxY-minY];
+    const colors=H.colorSettings(m);
+    const finishes=planView||view==='section'?'':`.wall{fill:${colors.facade}}.roof{fill:${colors.roof}}.plinth{fill:${colors.foundation}}.porch-post{fill:${colors.columns}}.exterior-window{stroke:${colors.windowFrames};stroke-width:2}.exterior-sash{stroke:${colors.windowFrames};stroke-width:2}.exterior-door{fill:${colors.entranceDoor};stroke:${colors.entranceDoor}}.selected{fill:#b5e2d7;stroke:#147d69}`;
     const content=planView?plan(m,view==='plan1'?1:2,selection):view==='section'?section(m):elevation(m,view,selection);
-    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${box.join(' ')}" role="img" aria-label="Редактируемый чертёж дома"><style>${css}</style><rect x="${box[0]}" y="${box[1]}" width="${box[2]}" height="${box[3]}" fill="white"/>${content}</svg>`;
+    return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${box.join(' ')}" role="img" aria-label="Редактируемый чертёж дома"><style>${css}${finishes}</style><rect x="${box[0]}" y="${box[1]}" width="${box[2]}" height="${box[3]}" fill="white"/>${content}</svg>`;
   }
   global.HouseDrawings={draw};
 })(window);

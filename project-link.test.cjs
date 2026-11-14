@@ -24,6 +24,7 @@ assert.deepEqual(restore,previous);
  el('undo').onclick();assert.deepEqual(JSON.parse(JSON.stringify(scope.houseEditor.snapshot())),previous);
  // A window-edit link must preserve current browser edits, including the canopy.
  const custom=H.clone(project);Object.assign(custom.porch,{roofWidth:2100,roofHeight:3100,roofAngle:22});
+ custom.colors.facade='#c0ffee';
  custom.openings.find(o=>o.id==='o14').name='Моё окно спальни';
  values.set('dom-9x8-editor-v1',JSON.stringify(custom));
  ctx.location.href='https://koopin66.github.io/dom-9x8/?edit=window12-like13&opening=o12';

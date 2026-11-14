@@ -27,6 +27,28 @@
   }
   const selectField=(key,label,value,options)=>`<label class="field wide"><span>${label}</span><select name="${key}">${options.map(([v,n])=>`<option value="${esc(v)}" ${String(v)===String(value)?'selected':''}>${esc(n)}</option>`).join('')}</select></label>`;
   const nameField=obj=>`<label class="field wide"><span>Название</span><input name="name" value="${esc(obj.name)}" maxlength="100" required></label>`;
+  const colorLabels={roof:'Кровля и козырёк',windowFrames:'Оконные рамы',entranceDoor:'Входная дверь',
+    facade:'Фасад',foundation:'Фундамент и цоколь',columns:'Столбы террасы и входа'};
+  const colorPresets=[['#474a51','RAL 7024 · Графитовый серый'],['#383e42','RAL 7016 · Антрацитовый серый'],
+    ['#ddc49a','RAL 1014 · Слоновая кость'],['#e6d2b5','RAL 1015 · Светлая слоновая кость'],
+    ['#f6f6f6','RAL 9016 · Транспортный белый'],['#0a0a0a','RAL 9005 · Чёрный']];
+  function colorCaption(color){
+    const preset=colorPresets.find(([hex])=>hex===color.toLowerCase());
+    return (preset?preset[1].split(' · ')[0]+' · ':'')+color.toUpperCase();
+  }
+  function colorField(key,label,value){
+    const color=value.toLowerCase(),known=colorPresets.some(([hex])=>hex===color);
+    return `<div class="field wide color-field"><label for="color-${key}">${label}</label><div class="color-controls"><input type="color" id="color-${key}" name="${key}" value="${color}" data-color-key="${key}"><select id="color-preset-${key}" name="preset_${key}" data-color-preset="${key}" aria-label="Оттенок RAL: ${label}">${colorPresets.map(([hex,name])=>`<option value="${hex}" ${hex===color?'selected':''}>${name}</option>`).join('')}<option value="custom" ${known?'':'selected'}>Свой цвет</option></select></div><small id="color-value-${key}">${colorCaption(color)}</small></div>`;
+  }
+  function syncColorControls(event){
+    if(selection.type!=='colors')return;
+    const data=event?.target?.dataset,key=data?.colorKey||data?.colorPreset;
+    if(!Object.prototype.hasOwnProperty.call(H.defaultColors,key))return;
+    const input=$('color-'+key),preset=$('color-preset-'+key);
+    if(data.colorPreset&&event.target.value!=='custom')input.value=event.target.value;
+    preset.value=colorPresets.some(([hex])=>hex===input.value.toLowerCase())?input.value.toLowerCase():'custom';
+    $('color-value-'+key).textContent=colorCaption(input.value);
+  }
   const houseLabels={width:'Ширина дома, мм',depth:'Глубина дома, мм',split:'Двухэтажная часть, мм',kitchenDepth:'Глубина кухни, мм',ceiling:'Потолок 1 этажа, мм',slab:'Перекрытие, мм',atticLow:'Низ аттика, мм',atticHigh:'Верх аттика, мм',kitchenEave:'Низ крыши кухни, мм',kitchenRise:'Подъём крыши кухни, мм',roofThickness:'Толщина кровли, мм',overhang:'Свес кровли, мм',base:'Высота цоколя, мм',terraceDrop:'Перепад основания террасы, мм',facadeProjection:'Выступ фасада наружу, мм'};
   const porchLabels={roofWidth:'Ширина крыши, мм',roofDepth:'Вылет от фасада, мм',roofAngle:'Уклон от стены, °',
     roofHeight:'Высота низа у стены, мм',roofThickness:'Толщина крыши, мм',roofOffsetX:'Смещение крыши вправо, мм'};
@@ -39,13 +61,14 @@
     view3d?.setMode('all',false);view3d?.focusPorch();
   }
   function objectList(){
-    const opts=[['house:house','Дом и крыша'],['stair:stair','Лестница'],['porch:porch','Крыльцо']];
+    const opts=[['house:house','Дом и крыша'],['colors:colors','Цвета дома'],['stair:stair','Лестница'],['porch:porch','Крыльцо']];
     const groups=[['Общие размеры',opts],['Стены',model.walls.map(w=>['wall:'+w.id,w.name])],['Окна и двери',model.openings.map(o=>['opening:'+o.id,`${o.name} · ${o.floor} эт.`])]];
     $('object').innerHTML=groups.map(([label,options])=>`<optgroup label="${label}">${options.map(([value,name])=>`<option value="${esc(value)}">${esc(name)}</option>`).join('')}</optgroup>`).join('');
     $('object').value=selection.type+':'+selection.id;
   }
   function inspect(){
     clearTimeout(timer);objectList();let html='';
+    $('parameter-unit').textContent=selection.type==='colors'?'RAL / HEX':'мм';
     if(selection.type==='house'){
       const h=model.house;
       html='<p>Ширина и глубина пропорционально масштабируют план, толщины стен и проёмы. Высоты задаются отдельно. Размер части дома перемещает границу между объёмами.</p><div class="fields">';
@@ -53,6 +76,11 @@
       html+='</div><details><summary>Высоты, кровля и основание</summary><div class="fields">';
       for(const key of Object.keys(houseLabels).slice(4))html+=numberField(key,houseLabels[key],h[key],{min:H.limits[key][0],max:H.limits[key][1]});
       html+='</div></details>';
+    }else if(selection.type==='colors'){
+      const colors=H.colorSettings(model);
+      html='<p>Выберите готовый оттенок RAL или нажмите цветной образец, чтобы задать свой цвет. Изменения сразу видны на модели и фасадах.</p><div class="fields">';
+      for(const [key,label] of Object.entries(colorLabels))html+=colorField(key,label,colors[key]);
+      html+='</div><button type="button" id="colors-reset">Вернуть заданную палитру</button>';
     }else if(selection.type==='wall'){
       const w=model.walls.find(w=>w.id===selection.id),ax=H.wallAxis(w);
       html='<div class="fields">'+nameField(w);
@@ -87,6 +115,7 @@
       html+='</div><p>Скат направлен от стены к ступеням. Размеры крыши независимы от площадки; опоры подстраиваются под уклон. Отрицательное смещение сдвигает крышу влево.</p><p id="porch-roof-summary">'+porchSummary()+'</p></details><button type="button" id="porch-focus">Показать вход в 3D</button>';
     }
     $('properties').innerHTML=html;
+    if(selection.type==='colors')$('colors-reset').onclick=()=>{const next=H.clone(model);next.colors=H.clone(H.defaultColors);commit(next,true);};
     if(selection.type==='porch')$('porch-focus').onclick=showPorch;
     const canDelete=selection.type==='opening'||(selection.type==='wall'&&!model.walls.find(w=>w.id===selection.id).exterior);
     $('delete').hidden=!canDelete;$('error').hidden=true;
@@ -106,6 +135,8 @@
       if(values.width!==old.width&&values.split===old.split)values.split=H.round(old.split*values.width/old.width);
       if(values.depth!==old.depth&&values.kitchenDepth===old.kitchenDepth)values.kitchenDepth=H.round(old.kitchenDepth*values.depth/old.depth);
       next=H.resizeHouse(model,values);
+    }else if(selection.type==='colors'){
+      next.colors=Object.fromEntries(Object.keys(H.defaultColors).map(key=>[key,values[key]]));
     }else if(selection.type==='wall'){
       const w=next.walls.find(w=>w.id===selection.id),old=H.wallAxis(w);
       w.name=values.name;
@@ -179,8 +210,8 @@
     }
     toast('На этой стене нет места для нового проёма стандартного размера. Освободите место или выберите другую стену.');
   }
-  $('properties').addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(applyFields,450);});
-  $('properties').addEventListener('change',()=>{clearTimeout(timer);applyFields();});
+  $('properties').addEventListener('input',event=>{syncColorControls(event);clearTimeout(timer);timer=setTimeout(applyFields,450);});
+  $('properties').addEventListener('change',event=>{syncColorControls(event);clearTimeout(timer);applyFields();});
   $('object').addEventListener('change',event=>{const [type,id]=event.target.value.split(':');select({type,id});});
   $('drawing-view').addEventListener('change',event=>{view=event.target.value;draw();});
   $('drawing').addEventListener('click',event=>{const e=event.target.closest('[data-id]');if(e)select({type:e.dataset.type,id:e.dataset.id});});
@@ -241,6 +272,7 @@
   const requestedOpening=projectUrl.searchParams.get('opening');
   if(model.openings.some(o=>o.id===requestedOpening))select({type:'opening',id:requestedOpening});
   if(projectUrl.searchParams.get('object')==='porch'){select({type:'porch',id:'porch'});showPorch();}
+  if(projectUrl.searchParams.get('object')==='colors')select({type:'colors',id:'colors'});
   // Read-only snapshot for diagnostics and acceptance checks.
   window.houseEditor={snapshot:()=>H.clone(model),getSelection:()=>({...selection})};
 })();

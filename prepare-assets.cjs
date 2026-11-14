@@ -7,6 +7,7 @@ const sources=['editor-model.js','editor-drawings.js','editor-3d.js','editor.js'
 const bundle=sources.map(name=>'/* '+name+' */\n'+fs.readFileSync(path.join(root,name),'utf8')).join('\n;\n');
 const hash=crypto.createHash('sha256').update(bundle).digest('hex').slice(0,16);
 const asset='assets/house-editor.'+hash+'.js';
+const cssHash=crypto.createHash('sha256').update(fs.readFileSync(path.join(root,'editor.css'))).digest('hex').slice(0,16);
 const checking=process.argv.includes('--check');
 const scriptPattern=/<script src="(?:editor-(?:model|drawings|3d)|editor)\.js[^"\r\n]*"><\/script>/g;
 const bundlePattern=/<script src="assets\/house-editor\.[a-f0-9]+\.js"><\/script>/g;
@@ -18,7 +19,8 @@ for(const name of ['index.html','dom-9x8.html']){
   const file=path.join(root,name),html=fs.readFileSync(file,'utf8');
   let inserted=false;
   const replace=()=>{if(inserted)return '';inserted=true;return '<script src="'+asset+'"></script>';};
-  const next=html.replace(scriptPattern,replace).replace(bundlePattern,()=>'<script src="'+asset+'"></script>');
+  const next=html.replace(scriptPattern,replace).replace(bundlePattern,()=>'<script src="'+asset+'"></script>')
+    .replace(/href="editor\.css(?:\?v=[^"]*)?"/g,'href="editor.css?v='+cssHash+'"');
   if(checking){
     if(next!==html||html.match(bundlePattern)?.length!==1||!fs.existsSync(path.join(root,asset))||fs.readFileSync(path.join(root,asset),'utf8')!==bundle)
       throw new Error('Run node prepare-assets.cjs before publishing.');

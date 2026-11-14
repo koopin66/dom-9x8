@@ -1,0 +1,74 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs'),vm=require('node:vm');
+const H=require('./editor-model.js'),T=require('./vendor/three.min.js');
+const legacy=H.clone(H.initial);delete legacy.colors;
+assert.deepEqual(H.canonical(legacy).colors,H.defaultColors);
+const restored=H.canonical(legacy);delete restored.colors;assert.deepEqual(restored,legacy);
+for(const value of [null,[],{roof:'red'},{roof:'#fff'},{columns:'#GGGGGG'},{facade:'url(example)'},{foundation:123}]){
+ const invalid=H.clone(H.initial);invalid.colors=value;assert.throws(()=>H.canonical(invalid));
+}
+const model=H.clone(H.initial);
+model.colors={roof:'#123456',windowFrames:'#e9ab34',entranceDoor:'#5a1122',facade:'#f1e8c1',foundation:'#203040',columns:'#d53388'};
+assert.deepEqual(H.canonical(JSON.parse(JSON.stringify(model))),model);
+let scene;
+T.WebGLRenderer=class{constructor(){this.shadowMap={};this.domElement={addEventListener(){},remove(){}};}setPixelRatio(){}setSize(){}dispose(){}render(s){scene=s;s.updateMatrixWorld(true);}};
+T.OrbitControls=class{constructor(){this.target=new T.Vector3();}addEventListener(){}update(){}dispose(){}};
+const scope={THREE:T,HouseModel:H};
+const ctx=vm.createContext({window:scope,THREE:T,devicePixelRatio:1,ResizeObserver:class{observe(){}disconnect(){}}});
+vm.runInContext(fs.readFileSync('editor-3d.js','utf8'),ctx);
+vm.runInContext(fs.readFileSync('editor-drawings.js','utf8'),ctx);
+const view=scope.createHouseView({appendChild(){},clientWidth:900,clientHeight:700},()=>{});
+const hex=o=>'#'+o.material.color.clone().convertLinearToSRGB().getHexString();
+function checkMaterials(m){
+ view.update(m);const all=[];scene.traverse(o=>{if(o.isMesh)all.push(o);});
+ const facade=all.filter(o=>o.userData.entity?.type==='wall'&&o.userData.entity.id==='left');
+ assert.ok(facade.length);facade.forEach(o=>assert.equal(hex(o),m.colors.facade));
+ const canopy=all.find(o=>o.userData.part==='porch-roof');
+ const roofs=canopy.parent.children.filter(o=>o.isMesh);assert.equal(roofs.length,5);
+ roofs.forEach(o=>assert.equal(hex(o),m.colors.roof,'Roof/underlay must not follow window color'));
+ const frame=all.filter(o=>o.userData.entity?.type==='opening'&&m.openings.some(p=>p.id===o.userData.entity.id&&['window','glazedDoor'].includes(p.kind))&&!o.material.transparent);
+ assert.ok(frame.length);frame.forEach(o=>assert.equal(hex(o),m.colors.windowFrames));
+ const door=m.openings.find(o=>o.wallId==='front'&&o.kind==='door');
+ assert.equal(hex(all.find(o=>o.userData.entity?.type==='opening'&&o.userData.entity.id===door.id)),m.colors.entranceDoor);
+ const posts=all.filter(o=>o.userData.part==='porch-post'||(o.geometry.type==='BoxGeometry'&&o.geometry.parameters.width===150&&o.geometry.parameters.depth===150&&o.geometry.parameters.height>2000));
+ assert.equal(posts.length,4);posts.forEach(o=>assert.equal(hex(o),m.colors.columns));
+ const base=all.find(o=>o.geometry.type==='BoxGeometry'&&o.geometry.parameters.width===m.house.split&&o.geometry.parameters.depth===m.house.depth&&o.geometry.parameters.height===m.house.base);
+ assert.ok(base);assert.equal(hex(base),m.colors.foundation);
+ assert.equal(hex(all.find(o=>o.userData.part==='porch-foundation')),m.colors.foundation);
+}
+checkMaterials(H.initial);checkMaterials(model);checkMaterials(model);view.dispose();
+const defaults=H.defaultColors;
+for(const key of ['roof','windowFrames','entranceDoor','foundation','columns'])assert.equal(defaults[key],'#474a51');
+assert.equal(defaults.facade,'#ddc49a');
+const svg=scope.HouseDrawings.draw(model,'front',null);
+for(const [selector,key] of [['wall','facade'],['roof','roof'],['plinth','foundation'],['porch-post','columns'],['exterior-door','entranceDoor']])assert.ok(svg.includes('.'+selector+'{fill:'+model.colors[key]));
+assert.ok(svg.includes('.exterior-window{stroke:'+model.colors.windowFrames));
+assert.equal(scope.HouseDrawings.draw(model,'plan1',null),scope.HouseDrawings.draw(H.initial,'plan1',null));
+(async()=>{
+ const elements=new Map(),storage=new Map([['dom-9x8-editor-v1',JSON.stringify(legacy)]]);let inputs=[];
+ const el=id=>{if(!elements.has(id))elements.set(id,{style:{},value:'',dataset:{},listeners:{},addEventListener(name,fn){this.listeners[name]=fn;},querySelector(){return {style:{}};},querySelectorAll(){return id==='properties'?inputs:[];}});return elements.get(id);};
+ const ui={HouseModel:H};
+ const environment=vm.createContext({window:ui,document:{getElementById:el,querySelectorAll(){return [];}},URL,location:{href:'https://koopin66.github.io/dom-9x8/?object=colors'},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},setTimeout(){return 1;},clearTimeout(){},console,createHouseView(){return {update(){},select(){}};}});
+ vm.runInContext(fs.readFileSync('editor-drawings.js','utf8'),environment);environment.HouseDrawings=ui.HouseDrawings;
+ await vm.runInContext(fs.readFileSync('editor.js','utf8'),environment);
+ assert.equal(ui.houseEditor.getSelection().type,'colors');assert.equal(el('parameter-unit').textContent,'RAL / HEX');
+ for(const key of Object.keys(defaults)){
+  assert.ok(el('properties').innerHTML.includes('name="'+key+'"'));
+  const picker=el('color-'+key),preset=el('color-preset-'+key);
+  Object.assign(picker,{name:key,type:'color',value:defaults[key],dataset:{colorKey:key},checkValidity(){return true;}});
+  Object.assign(preset,{name:'preset_'+key,type:'select-one',value:defaults[key],dataset:{colorPreset:key},checkValidity(){return true;}});
+  inputs.push(picker,preset);
+ }
+ el('color-roof').value='#abcdef';el('properties').listeners.change({target:el('color-roof')});
+ assert.equal(ui.houseEditor.snapshot().colors.roof,'#abcdef');assert.equal(el('color-preset-roof').value,'custom');
+ el('color-preset-columns').value='#ddc49a';el('properties').listeners.change({target:el('color-preset-columns')});
+ assert.equal(el('color-columns').value,'#ddc49a');
+ const custom=JSON.parse(JSON.stringify(ui.houseEditor.snapshot()));
+ assert.equal(custom.colors.roof,'#abcdef');assert.equal(custom.colors.columns,'#ddc49a');
+ assert.deepEqual(JSON.parse(storage.get('dom-9x8-editor-v1')),custom);
+ const geometry=H.clone(custom);delete geometry.colors;assert.deepEqual(geometry,legacy);
+ el('colors-reset').onclick();assert.deepEqual(JSON.parse(JSON.stringify(ui.houseEditor.snapshot().colors)),defaults);
+ el('undo').onclick();assert.deepEqual(JSON.parse(JSON.stringify(ui.houseEditor.snapshot())),custom);
+ el('redo').onclick();assert.deepEqual(JSON.parse(JSON.stringify(ui.houseEditor.snapshot().colors)),defaults);
+ console.log('Passed independent colors on actual meshes, RAL defaults, facade SVG, legacy JSON, palette controls, presets, persistence and undo/redo.');
+})().catch(e=>{console.error(e);process.exitCode=1;});

@@ -4,7 +4,7 @@ const H=require('./editor-model.js'),T=require('./vendor/three.min.js');
 const legacy=JSON.parse(fs.readFileSync('projects/room-areas.json','utf8'));
 const migrated=H.canonical(legacy);
 assert.equal(migrated.porch.roofAngle,15);assert.equal(migrated.porch.roofWidth,legacy.porch.width+150);
-const unchanged=H.clone(migrated);unchanged.porch=legacy.porch;assert.deepEqual(unchanged,legacy);
+const unchanged=H.clone(migrated);unchanged.porch=legacy.porch;delete unchanged.colors;assert.deepEqual(unchanged,legacy);
 const model=H.clone(migrated);
 Object.assign(model.porch,{roofWidth:2200,roofDepth:1600,roofAngle:20,roofHeight:3100,roofThickness:90,roofOffsetX:100});
 assert.deepEqual(H.validate(model),[]);

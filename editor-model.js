@@ -6,6 +6,10 @@
   const house = {width:9000, depth:8000, split:5075, kitchenDepth:6000,
     ceiling:2700, slab:200, atticLow:1200, atticHigh:3271, kitchenEave:2900,
     kitchenRise:1609.25, roofThickness:250, overhang:350, base:350, terraceDrop:50, facadeProjection:121};
+  // Screen approximations of RAL 7024 Graphite grey and RAL 1014 Ivory.
+  const defaultColors={roof:'#474a51',windowFrames:'#474a51',entranceDoor:'#474a51',
+    facade:'#ddc49a',foundation:'#474a51',columns:'#474a51'};
+  const colorSettings=m=>({...defaultColors,...m.colors});
   const walls = [];
   function wall(id, name, x1, y1, x2, y2, floor, roof, exterior=false) {
     walls.push({id, name, axis:x2-x1 >= y2-y1?'x':'y', x1,y1,x2,y2,floor,roof,exterior,height:0});
@@ -49,7 +53,7 @@
   opening('left',6000,500,1550,500);
   const initial={schema:'dom-editor',version:1,house,walls,openings,
     stair:{x:1375,y:3860,length:3150,width:815,steps:15},
-    porch:{x:2100,width:1400,depth:1200}};
+    porch:{x:2100,width:1400,depth:1200},colors:{...defaultColors}};
   Object.assign(initial.porch,porchSettings(initial));
   const porchLimits={roofWidth:[600,20000],roofDepth:[300,5000],roofAngle:[0,45],
     roofHeight:[2100,6000],roofThickness:[30,500],roofOffsetX:[-5000,5000]};
@@ -219,6 +223,9 @@
     const errors=[];
     const validNumber=v=>typeof v==='number'&&Number.isFinite(v);
     if(!m||m.schema!=='dom-editor'||m.version!==1||!m.house||!Array.isArray(m.walls)||!Array.isArray(m.openings))return ['Неизвестный формат проекта. Нужен JSON из этого редактора.'];
+    if(m.colors!==undefined&&(!m.colors||typeof m.colors!=='object'||Array.isArray(m.colors)))return ['Неверный формат цветов дома.'];
+    const colors=colorSettings(m);
+    if(Object.keys(defaultColors).some(key=>typeof colors[key]!=='string'||!/^#[a-f\d]{6}$/i.test(colors[key])))errors.push('Цвета задаются в формате HEX #RRGGBB, например #474A51.');
     const h={facadeProjection:121,...m.house};
     for(const [key,[min,max]] of Object.entries(limits))if(!validNumber(h[key])||h[key]<min||h[key]>max)errors.push('Недопустимый параметр дома «'+key+'» ('+min+'…'+max+' мм).');
     if(h.width-h.split<1800||h.depth-h.kitchenDepth<500)errors.push('Крыло кухни должно быть шире 1800 мм, терраса глубже 500 мм.');
@@ -278,9 +285,10 @@
     return {schema:'dom-editor',version:1,house:pick({facadeProjection:121,...value.house},Object.keys(house)),
       walls:value.walls.map(w=>pick(w,Object.keys(walls[0]))),
       openings:value.openings.map(o=>pick({thickness:70,...o},Object.keys(openings[0]))),
-      stair:pick(value.stair,Object.keys(initial.stair)),porch:pick(porchSettings(value),Object.keys(initial.porch))};
+      stair:pick(value.stair,Object.keys(initial.stair)),porch:pick(porchSettings(value),Object.keys(initial.porch)),
+      colors:pick(colorSettings(value),Object.keys(defaultColors))};
   }
-  const api={initial,clone,round,limits,porchLimits,porchSettings,porchRoofGeometry,floorZ,mainTop,lowTop,wallAxis,wallTop,facadeWalls,openingFace,openingGeometry,openingPlacement,alignUpperWindows,roomGeometry,resizeHouse,validate,canonical};
+  const api={initial,clone,round,limits,defaultColors,colorSettings,porchLimits,porchSettings,porchRoofGeometry,floorZ,mainTop,lowTop,wallAxis,wallTop,facadeWalls,openingFace,openingGeometry,openingPlacement,alignUpperWindows,roomGeometry,resizeHouse,validate,canonical};
   global.HouseModel=api;
   if(typeof module!=='undefined')module.exports=api;
 })(typeof window==='undefined'?globalThis:window);
