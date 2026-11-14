@@ -172,7 +172,7 @@ global.createHouseView=function(host,onSelect){
     }
     roof(-h.overhang,h.split+h.overhang,high);roof(h.split,h.width+h.overhang,low);
     const right=h.width-150,back=h.depth-150;
-    for(const [x,y] of [[h.split+(h.width-h.split)*.23,back],[h.split+(h.width-h.split)*.49,back],[right,back],[right,h.kitchenDepth+(h.depth-h.kitchenDepth)*.55]])
+    for(const [x,y] of [[h.split+(h.width-h.split)*.49,back],[right,back]])
       solid(x,y,25-h.terraceDrop,x+150,y+150,low(x),mat.frame);
     solid(p.x,-p.depth,-h.base,p.x+p.width,0,0,mat.deck);
     solid(p.x-75,-p.depth-125,h.ceiling-350,p.x+p.width+75,0,h.ceiling-200,mat.roof);
