@@ -1,0 +1,26 @@
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const vm=require('node:vm');
+const H=require('./editor-model.js');
+const project=JSON.parse(fs.readFileSync('projects/window13-roof.json','utf8'));
+const previous=H.clone(project);const before=previous.openings.find(o=>o.id==='o13');before.corner=.7;before.rakeDrop=450;
+const opening=project.openings.find(o=>o.id==='o13'),g=H.openingGeometry(project,opening);
+assert.equal(opening.width,1400);assert.equal(opening.corner,.5);assert.equal(g.b-g.corner,700);
+assert.ok(Math.abs((g.head(g.corner)-g.head(g.a))/(g.corner-g.a)-(project.house.atticHigh-project.house.atticLow)/project.house.split)<1e-12);
+assert.deepEqual(H.validate(project),[]);
+const restore=H.clone(project);restore.openings.find(o=>o.id==='o13').corner=.7;restore.openings.find(o=>o.id==='o13').rakeDrop=450;
+assert.deepEqual(restore,previous);
+(async()=>{
+ const elements=new Map(),values=new Map([['dom-9x8-editor-v1',JSON.stringify(previous)]]);
+ const el=id=>{if(!elements.has(id))elements.set(id,{style:{},value:'',addEventListener(){},querySelector(){return {style:{}};},querySelectorAll(){return [];}});return elements.get(id);};
+ const scope={HouseModel:H};const url='https://koopin66.github.io/dom-9x8/?project=window13-roof&opening=o13';let rewritten,requests=0;
+ const ctx=vm.createContext({window:scope,document:{getElementById:el,querySelectorAll(){return [];}},URL,location:{href:url},history:{replaceState(a,b,value){rewritten=value;}},localStorage:{getItem:k=>values.get(k),setItem:(k,v)=>values.set(k,v)},setTimeout(){return 1;},clearTimeout(){},console,createHouseView(){return {update(){},select(){}};},fetch:async path=>{requests++;assert.equal(path,'projects/window13-roof.json');return {ok:true,json:async()=>project};}});
+ vm.runInContext(fs.readFileSync('editor-drawings.js','utf8'),ctx);ctx.HouseDrawings=scope.HouseDrawings;
+ await vm.runInContext(fs.readFileSync('editor.js','utf8'),ctx);
+ assert.equal(requests,1);assert.deepEqual(JSON.parse(JSON.stringify(scope.houseEditor.snapshot())),project);
+ assert.equal(scope.houseEditor.getSelection().id,'o13');assert.equal(el('drawing-view').value,'plan2');
+ assert.ok(!new URL(rewritten).searchParams.has('project'));
+ assert.deepEqual(JSON.parse(values.get('dom-9x8-editor-v1')),project);
+ el('undo').onclick();assert.deepEqual(JSON.parse(JSON.stringify(scope.houseEditor.snapshot())),previous);
+ console.log('Passed roof-parallel window 13, midpoint kink, project import link, selection, persistence and undo.');
+})().catch(e=>{console.error(e);process.exitCode=1;});

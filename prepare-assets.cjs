@@ -24,8 +24,5 @@ for(const name of ['index.html','dom-9x8.html']){
       throw new Error('Run node prepare-assets.cjs before publishing.');
   }else fs.writeFileSync(file,next);
 }
-if(!checking){
-  for(const name of fs.readdirSync(path.join(root,'assets')))
-    if(/^house-editor\.[a-f0-9]+\.js$/.test(name)&&'assets/'+name!==asset)fs.unlinkSync(path.join(root,'assets',name));
-}
+// Retain older hashed scripts while browsers may still have their HTML cached.
 console.log((checking?'Verified ':'Prepared ')+asset);

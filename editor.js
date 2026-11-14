@@ -1,4 +1,4 @@
-(function(){
+(async function(){
   'use strict';
   const H=window.HouseModel,storeKey='dom-9x8-editor-v1';
   const $=id=>document.getElementById(id);
@@ -197,8 +197,23 @@
     }else if(selection.type==='opening')next.openings=next.openings.filter(o=>o.id!==selection.id);
     if(commit(next))select({type:'house',id:'house'});
   };
+  // An explicit project link imports a saved variant once; undo restores the
+  // previous browser project, and refresh keeps subsequent user edits.
+  const projectUrl=new URL(location.href),projectName=projectUrl.searchParams.get('project');
+  if(projectName&&/^[a-z0-9-]{1,64}$/.test(projectName)){
+    try{
+      const response=await fetch('projects/'+projectName+'.json',{cache:'no-store'});
+      if(!response.ok)throw new Error('Не удалось открыть проект по ссылке.');
+      const next=H.canonical(await response.json());
+      undo.push(H.clone(model));model=next;save();
+      projectUrl.searchParams.delete('project');history.replaceState(null,'',projectUrl.href);
+      toast('Проект открыт. Предыдущий вариант можно вернуть кнопкой «Отменить».');
+    }catch(e){toast('Проект по ссылке не загружен. '+e.message);}
+  }
   try{view3d=createHouseView($('model'),select);}catch(e){$('model-message').textContent='3D недоступно в этом браузере. '+e.message;$('model-message').hidden=false;}
   inspect();render();updateButtons();
+  const requestedOpening=projectUrl.searchParams.get('opening');
+  if(model.openings.some(o=>o.id===requestedOpening))select({type:'opening',id:requestedOpening});
   // Read-only snapshot for diagnostics and acceptance checks.
   window.houseEditor={snapshot:()=>H.clone(model),getSelection:()=>({...selection})};
 })();
