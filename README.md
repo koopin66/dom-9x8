@@ -26,4 +26,6 @@
 - `vendor/` — Three.js r128 и OrbitControls с лицензией MIT.
 - `drawings/` — исходные листы для сравнения.
 
-Сборка не требуется. Для локального запуска можно использовать `python -m http.server 8080`. Проверка геометрии и JSON — `node editor-model.test.cjs` и `node editor-facade.test.cjs`.
+После изменений JS выполните `node prepare-assets.cjs`: он обновляет единый файл приложения с именем по содержимому и ссылки в обеих HTML-страницах. Браузер загружает согласованную версию модели, плана и 3D без использования старых файлов из кэша. Проверка актуальности — `node prepare-assets.cjs --check`.
+
+Для локального запуска можно использовать `python -m http.server 8080`. Проверка геометрии и JSON — `node editor-model.test.cjs` и `node editor-facade.test.cjs`.

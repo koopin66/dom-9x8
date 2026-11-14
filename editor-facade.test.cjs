@@ -23,6 +23,20 @@ view.update(model);
 function meshes(type,id){const result=[];scene.traverse(o=>{if(o.isMesh&&o.userData.entity?.type===type&&(!id||o.userData.entity.id===id))result.push(o);});return result;}
 function bounds(objects){const b=new T.Box3();objects.forEach(o=>b.expandByObject(o));return b;}
 function near(actual,expected){assert.ok(Math.abs(actual-expected)<1e-6,`${actual} != ${expected}`);}
+function checkFullOpenings(model){
+  view.update(model);
+  for(const o of model.openings.filter(o=>o.kind==='window'||o.kind==='glazedDoor')){
+    const g=H.openingGeometry(model,o),face=H.openingFace(model,g.w);
+    const sign=['left','front','kf'].includes(g.w.id)?-1:1;
+    for(const across of [.05,.25,.5,.75,.95])for(const up of [.05,.25,.5,.75,.95]){
+      const u=g.a+o.width*across,z=g.sill+(g.head(u)-g.sill)*up;
+      const origin=new T.Vector3(g.w.axis==='x'?u/1000:(face+sign*500)/1000,z/1000,g.w.axis==='x'?(face+sign*500)/1000:u/1000);
+      const direction=g.w.axis==='x'?new T.Vector3(0,0,-sign):new T.Vector3(-sign,0,0);
+      const hits=new T.Raycaster(origin,direction,0,.8).intersectObjects(meshes('wall'));
+      assert.equal(hits.length,0,`Wall covers ${o.id} at ${across}, ${up}`);
+    }
+  }
+}
 const envelope=bounds(meshes('wall'));
 near(envelope.min.x,-.121);near(envelope.min.z,-.121);
 near(envelope.max.x,9.121);near(envelope.max.z,8.121);
@@ -80,5 +94,10 @@ for(const name of ['plan1','plan2','front','back','left','right','section']){
  }
 }
 model.house.facadeProjection=0;view.update(model);near(bounds(meshes('wall')).min.x,0);
+checkFullOpenings(H.initial);
+const screenshot=H.clone(H.initial),bedroom=screenshot.openings.find(o=>o.id==='o14');
+Object.assign(bedroom,{width:1400,height:1700,offset:2757,thickness:70});
+assert.deepEqual(H.validate(screenshot),[]);
+checkFullOpenings(screenshot);
 view.dispose();
 console.log('Passed windows centered inside 121 mm facade in 3D and plans, exact 70/95 mm thickness, clear openings, resizing and JSON compatibility.');
