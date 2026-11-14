@@ -49,12 +49,30 @@
   const initial={schema:'dom-editor',version:1,house,walls,openings,
     stair:{x:1375,y:3860,length:3150,width:815,steps:15},
     porch:{x:2100,width:1400,depth:1200}};
+  Object.assign(initial.porch,porchSettings(initial));
+  const porchLimits={roofWidth:[600,20000],roofDepth:[300,5000],roofAngle:[0,45],
+    roofHeight:[2100,6000],roofThickness:[30,500],roofOffsetX:[-5000,5000]};
   const limits={width:[5000,20000],depth:[5000,20000],split:[2500,14000],kitchenDepth:[2500,18000],
     ceiling:[2200,4500],slab:[100,500],atticLow:[600,3000],atticHigh:[1800,6000],
     kitchenEave:[2200,5000],kitchenRise:[0,4000],roofThickness:[100,600],overhang:[0,1200],base:[150,1200],terraceDrop:[0,250],facadeProjection:[0,1200]};
   const floorZ=(m,f)=>f===2?m.house.ceiling+m.house.slab:0;
   const mainTop=(m,x)=>floorZ(m,2)+m.house.atticLow+(m.house.atticHigh-m.house.atticLow)*x/m.house.split;
   const lowTop=(m,x)=>m.house.kitchenEave+m.house.kitchenRise*(m.house.width-x)/(m.house.width-m.house.split);
+  function porchSettings(m) {
+    const p=m.porch,depth=Math.max(300,p.depth+125-(m.house.facadeProjection??121));
+    return {roofWidth:p.width+150,roofDepth:depth,
+      roofAngle:15,roofHeight:Math.max(m.house.ceiling,2000+depth*Math.tan(15*Math.PI/180)),roofThickness:150,roofOffsetX:0,...p};
+  }
+  function porchRoofGeometry(m) {
+    const p=porchSettings(m),wallY=-(m.house.facadeProjection??121),slope=Math.tan(p.roofAngle*Math.PI/180);
+    const x1=p.x+p.width/2+p.roofOffsetX-p.roofWidth/2,x2=x1+p.roofWidth;
+    const y1=wallY-p.roofDepth,y2=wallY,thicknessZ=p.roofThickness/Math.cos(p.roofAngle*Math.PI/180);
+    const bottom=y=>p.roofHeight+(y-wallY)*slope,top=y=>bottom(y)+thicknessZ;
+    const postLeft=Math.max(p.x,x1+75),postRight=Math.min(p.x+p.width-100,x2-175);
+    const postY=Math.min(y2-100,Math.max(-p.depth,y1+125));
+    return {p,x1,x2,y1,y2,bottom,top,thicknessZ,postLeft,postRight,postY,
+      overhangLeft:p.x-x1,overhangRight:x2-p.x-p.width,overhangFront:-p.depth-y1};
+  }
   function wallAxis(w) {
     return w.axis==='x'?{start:w.x1,end:w.x2,lo:w.y1,hi:w.y2}:{start:w.y1,end:w.y2,lo:w.x1,hi:w.x2};
   }
@@ -183,7 +201,8 @@
     const st=m.stair;
     st.length=round(mx(st.x+st.length)-mx(st.x));st.width=round(my(st.y+st.width)-my(st.y));
     st.x=round(mx(st.x));st.y=round(my(st.y));
-    m.porch.width=round(mx(m.porch.x+m.porch.width)-mx(m.porch.x));m.porch.x=round(mx(m.porch.x));
+    const porch=porchSettings(m),porchWidth=round(mx(m.porch.x+m.porch.width)-mx(m.porch.x)),factor=porchWidth/m.porch.width;
+    m.porch={...porch,width:porchWidth,x:round(mx(m.porch.x)),roofWidth:round(porch.roofWidth*factor),roofOffsetX:round(porch.roofOffsetX*factor)};
     m.house=next;return m;
   }
   function validate(m) {
@@ -230,6 +249,16 @@
     const st=m.stair,p=m.porch;
     if(!st||!['x','y','length','width','steps'].every(k=>validNumber(st[k]))||st.x<0||st.y<0||st.length<1000||st.width<500||st.x+st.length>h.split||st.y+st.width>h.depth||!Number.isInteger(st.steps)||st.steps<8||st.steps>30)errors.push('Лестница должна помещаться в двухэтажной части. Ширина от 500 мм, от 8 до 30 подъёмов.');
     if(!p||!['x','width','depth'].every(k=>validNumber(p[k]))||p.x<0||p.width<600||p.depth<300||p.depth>3000||p.x+p.width>h.split)errors.push('Проверьте размеры и положение крыльца.');
+    else{
+      const settings=porchSettings(m);
+      const invalid=Object.entries(porchLimits).some(([key,[min,max]])=>!validNumber(settings[key])||settings[key]<min||settings[key]>max);
+      if(invalid)errors.push('Проверьте размеры крыши входа: угол 0…45°, ширина 600…20000 мм, вылет 300…5000 мм, высота 2100…6000 мм, толщина 30…500 мм, смещение ±5000 мм.');
+      else{
+        const roof=porchRoofGeometry(m);
+        if(roof.bottom(roof.y1)<1800)errors.push('Передний край крыши входа ниже 1800 мм. Поднимите крышу либо уменьшите угол или вылет.');
+        if(roof.postRight-roof.postLeft<200||roof.postY+100>roof.y2)errors.push('Крыша входа должна перекрывать крыльцо в местах двух опор. Измените ширину, вылет или смещение крыши.');
+      }
+    }
     return [...new Set(errors)];
   }
   function canonical(value) {
@@ -239,9 +268,9 @@
     return {schema:'dom-editor',version:1,house:pick({facadeProjection:121,...value.house},Object.keys(house)),
       walls:value.walls.map(w=>pick(w,Object.keys(walls[0]))),
       openings:value.openings.map(o=>pick({thickness:70,...o},Object.keys(openings[0]))),
-      stair:pick(value.stair,Object.keys(initial.stair)),porch:pick(value.porch,Object.keys(initial.porch))};
+      stair:pick(value.stair,Object.keys(initial.stair)),porch:pick(porchSettings(value),Object.keys(initial.porch))};
   }
-  const api={initial,clone,round,limits,floorZ,mainTop,lowTop,wallAxis,wallTop,facadeWalls,openingFace,openingGeometry,openingPlacement,roomGeometry,resizeHouse,validate,canonical};
+  const api={initial,clone,round,limits,porchLimits,porchSettings,porchRoofGeometry,floorZ,mainTop,lowTop,wallAxis,wallTop,facadeWalls,openingFace,openingGeometry,openingPlacement,roomGeometry,resizeHouse,validate,canonical};
   global.HouseModel=api;
   if(typeof module!=='undefined')module.exports=api;
 })(typeof window==='undefined'?globalThis:window);

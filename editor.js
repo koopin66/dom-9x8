@@ -28,6 +28,16 @@
   const selectField=(key,label,value,options)=>`<label class="field wide"><span>${label}</span><select name="${key}">${options.map(([v,n])=>`<option value="${esc(v)}" ${String(v)===String(value)?'selected':''}>${esc(n)}</option>`).join('')}</select></label>`;
   const nameField=obj=>`<label class="field wide"><span>Название</span><input name="name" value="${esc(obj.name)}" maxlength="100" required></label>`;
   const houseLabels={width:'Ширина дома, мм',depth:'Глубина дома, мм',split:'Двухэтажная часть, мм',kitchenDepth:'Глубина кухни, мм',ceiling:'Потолок 1 этажа, мм',slab:'Перекрытие, мм',atticLow:'Низ аттика, мм',atticHigh:'Верх аттика, мм',kitchenEave:'Низ крыши кухни, мм',kitchenRise:'Подъём крыши кухни, мм',roofThickness:'Толщина кровли, мм',overhang:'Свес кровли, мм',base:'Высота цоколя, мм',terraceDrop:'Перепад основания террасы, мм',facadeProjection:'Выступ фасада наружу, мм'};
+  const porchLabels={roofWidth:'Ширина крыши, мм',roofDepth:'Вылет от фасада, мм',roofAngle:'Уклон от стены, °',
+    roofHeight:'Высота низа у стены, мм',roofThickness:'Толщина крыши, мм',roofOffsetX:'Смещение крыши вправо, мм'};
+  function porchSummary(){
+    const roof=H.porchRoofGeometry(model);
+    return `Низ переднего края: ${f(roof.bottom(roof.y1))} мм. Свесы: слева ${f(roof.overhangLeft)} мм, справа ${f(roof.overhangRight)} мм, спереди ${f(roof.overhangFront)} мм.`;
+  }
+  function showPorch(){
+    mode='all';document.querySelectorAll('[data-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode==='all')));
+    view3d?.setMode('all',false);view3d?.focusPorch();
+  }
   function objectList(){
     const opts=[['house:house','Дом и крыша'],['stair:stair','Лестница'],['porch:porch','Крыльцо']];
     const groups=[['Общие размеры',opts],['Стены',model.walls.map(w=>['wall:'+w.id,w.name])],['Окна и двери',model.openings.map(o=>['opening:'+o.id,`${o.name} · ${o.floor} эт.`])]];
@@ -70,9 +80,14 @@
       const s=model.stair;
       html='<div class="fields">'+numberField('x','Начало X, мм',s.x)+numberField('y','Начало Y, мм',s.y)+numberField('length','Длина в плане, мм',s.length,{min:1000})+numberField('width','Ширина марша, мм',s.width,{min:500})+numberField('steps','Подъёмов',s.steps,{min:8,max:30,step:1})+'</div><p>Высота лестницы привязана к полу второго этажа. Проём перекрытия перестраивается вместе с маршем.</p>';
     }else{
-      const p=model.porch;html='<div class="fields">'+numberField('x','Начало X, мм',p.x)+numberField('width','Ширина, мм',p.width,{min:600})+numberField('depth','Глубина, мм',p.depth,{min:300,max:3000})+'</div>';
+      const p=H.porchSettings(model);
+      html='<p>Площадка крыльца</p><div class="fields">'+numberField('x','Начало X, мм',p.x)+numberField('width','Ширина площадки, мм',p.width,{min:600})+numberField('depth','Глубина площадки, мм',p.depth,{min:300,max:3000})+'</div>';
+      html+='<details open><summary>Односкатная крыша входа</summary><div class="fields">';
+      for(const key of Object.keys(porchLabels))html+=numberField(key,porchLabels[key],p[key],{min:H.porchLimits[key][0],max:H.porchLimits[key][1]});
+      html+='</div><p>Скат направлен от стены к ступеням. Размеры крыши независимы от площадки; опоры подстраиваются под уклон. Отрицательное смещение сдвигает крышу влево.</p><p id="porch-roof-summary">'+porchSummary()+'</p></details><button type="button" id="porch-focus">Показать вход в 3D</button>';
     }
     $('properties').innerHTML=html;
+    if(selection.type==='porch')$('porch-focus').onclick=showPorch;
     const canDelete=selection.type==='opening'||(selection.type==='wall'&&!model.walls.find(w=>w.id===selection.id).exterior);
     $('delete').hidden=!canDelete;$('error').hidden=true;
   }
@@ -127,6 +142,7 @@
     clearTimeout(timer);selection=item;
     if(item.type==='opening')view=model.openings.find(o=>o.id===item.id).floor===2?'plan2':'plan1';
     if(item.type==='wall'){const w=model.walls.find(w=>w.id===item.id);if(w.floor===2)view='plan2';else if(w.floor===1)view='plan1';}
+    if(item.type==='porch')view='plan1';
     $('drawing-view').value=view;inspect();draw();view3d?.select(selection);
   }
   function draw(){
@@ -147,6 +163,7 @@
     $('summary').textContent=`${f(h.width)} × ${f(h.depth)} мм · две части ${f(h.split)} + ${f(h.width-h.split)} мм`;
     $('metrics').innerHTML=`<span>Пятно застройки <strong>${(h.width*h.depth/1e6).toLocaleString('ru-RU',{maximumFractionDigits:2})} м²</strong></span><span>Терраса <strong>${((h.width-h.split)*(h.depth-h.kitchenDepth)/1e6).toLocaleString('ru-RU',{maximumFractionDigits:2})} м²</strong></span><span>Основание террасы <strong>−${h.terraceDrop} мм</strong></span><span>Пол 2 этажа <strong>+${f(H.floorZ(model,2))} мм</strong></span>`;
     draw();
+    const roofSummary=$('porch-roof-summary');if(roofSummary)roofSummary.textContent=porchSummary();
     if(view3d){try{view3d.update(model);view3d.select(selection);}catch(e){$('model-message').textContent='Ошибка построения 3D. '+e.message;$('model-message').hidden=false;console.error(e);}}
   }
   function download(name,text,type){const url=URL.createObjectURL(new Blob([text],{type}));const a=document.createElement('a');a.href=url;a.download=name;a.click();setTimeout(()=>URL.revokeObjectURL(url),3000);}
@@ -214,6 +231,7 @@
   inspect();render();updateButtons();
   const requestedOpening=projectUrl.searchParams.get('opening');
   if(model.openings.some(o=>o.id===requestedOpening))select({type:'opening',id:requestedOpening});
+  if(projectUrl.searchParams.get('object')==='porch'){select({type:'porch',id:'porch'});showPorch();}
   // Read-only snapshot for diagnostics and acceptance checks.
   window.houseEditor={snapshot:()=>H.clone(model),getSelection:()=>({...selection})};
 })();

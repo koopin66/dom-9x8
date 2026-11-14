@@ -174,9 +174,19 @@ global.createHouseView=function(host,onSelect){
     const right=h.width-150,back=h.depth-150;
     for(const [x,y] of [[h.split+(h.width-h.split)*.49,back],[right,back]])
       solid(x,y,25-h.terraceDrop,x+150,y+150,low(x),mat.frame);
+    entity={type:'porch',id:'porch'};
     solid(p.x,-p.depth,-h.base,p.x+p.width,0,0,mat.deck);
-    solid(p.x-75,-p.depth-125,h.ceiling-350,p.x+p.width+75,0,h.ceiling-200,mat.roof);
-    for(const x of [p.x,p.x+p.width-100])solid(x,-p.depth,0,x+100,-p.depth+100,h.ceiling-350,mat.frame);
+    const canopy=H.porchRoofGeometry(model);
+    const roofPanel=prism([[canopy.y1,canopy.bottom(canopy.y1)],[canopy.y2,canopy.bottom(canopy.y2)],
+      [canopy.y2,canopy.top(canopy.y2)],[canopy.y1,canopy.top(canopy.y1)]],canopy.x2-canopy.x1,mat.roof);
+    roofPanel.userData.part='porch-roof';
+    add(place(roofPanel,'Y',canopy.x1,canopy.x2),roofG,false);
+    for(const x of [canopy.postLeft,canopy.postRight]){
+      const y=canopy.postY;
+      const post=prism([[y,0],[y+100,0],[y+100,canopy.bottom(y+100)],[y,canopy.bottom(y)]],100,mat.frame);
+      post.userData.part='porch-post';add(place(post,'Y',x,x+100),root,false);
+    }
+    entity=null;
     for(let i=0;i<3;i++){
       solid(p.x,-p.depth-750+250*i,-h.base,p.x+p.width,-p.depth-500+250*i,-h.base+(i+1)*h.base/4,mat.deck);
       solid(h.width-2000,h.depth+500-250*i,-h.base,h.width-200,h.depth+750-250*i,-h.base+(i+1)*(h.base-h.terraceDrop+25)/4,mat.deck);
@@ -197,6 +207,14 @@ global.createHouseView=function(host,onSelect){
     }
     render();
   }
+  function focusPorch(){
+    if(!currentModel)return;
+    const r=H.porchRoofGeometry(currentModel),cx=(r.x1+r.x2)/2000,cy=(r.y1+r.y2)/2000;
+    const size=Math.max(r.x2-r.x1,r.y2-r.y1,r.p.roofHeight)/1000;
+    controls.target.set(cx,r.p.roofHeight/2000,cy);
+    camera.position.set(cx+size*.65,r.p.roofHeight/1000+size*.35,cy-size*1.8);
+    controls.update();render();
+  }
   const resize=()=>{const w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;renderer.setSize(w,h);camera.aspect=w/h;camera.fov=2*Math.atan(Math.tan(20*Math.PI/180)/Math.min(1,camera.aspect))*180/Math.PI;camera.updateProjectionMatrix();render();};
   const observer=new ResizeObserver(resize);observer.observe(host);
   let down=null;
@@ -211,7 +229,7 @@ global.createHouseView=function(host,onSelect){
     if(hit?.object.userData.entity)onSelect(hit.object.userData.entity);
   });
   resize();controls.update();
-  return {update,select,setMode,render,
+  return {update,select,setMode,render,focusPorch,
     dispose(){observer.disconnect();controls.dispose();if(root)disposeGroup(root);Object.values(mat).forEach(m=>m.dispose());edgeMat.dispose();renderer.dispose();renderer.domElement.remove();}};
 };
 })(window);

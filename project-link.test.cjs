@@ -2,7 +2,7 @@ const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const vm=require('node:vm');
 const H=require('./editor-model.js');
-const project=JSON.parse(fs.readFileSync('projects/window13-roof.json','utf8'));
+const project=H.canonical(JSON.parse(fs.readFileSync('projects/window13-roof.json','utf8')));
 const previous=H.clone(project);const before=previous.openings.find(o=>o.id==='o13');before.corner=.7;before.rakeDrop=450;
 const opening=project.openings.find(o=>o.id==='o13'),g=H.openingGeometry(project,opening);
 assert.equal(opening.width,1400);assert.equal(opening.corner,.5);assert.equal(g.b-g.corner,700);

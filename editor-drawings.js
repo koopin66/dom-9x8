@@ -3,7 +3,7 @@
   const H=global.HouseModel;
   const esc=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const fmt=n=>Math.round(n).toLocaleString('ru-RU');
-  const css=`.wall{fill:#d9dfdc;stroke:#354640;stroke-width:1.2}.selected{fill:#b5e2d7;stroke:#147d69;stroke-width:2}.opening{fill:#e6f1f5;stroke:#48798a;stroke-width:1.4}.door{fill:#fff;stroke:#9a754c;stroke-width:1.4}.fine{fill:none;stroke:#889790;stroke-width:.7}.roof{fill:#d7dddd;stroke:#53615d;stroke-width:1}.floor{fill:#f0eee8;stroke:#a8afa9;stroke-width:1}.dim{fill:none;stroke:#647970;stroke-width:.7}.accent{fill:none;stroke:#147d69;stroke-width:1.5}text{font-family:system-ui,sans-serif;fill:#354640;font-size:180px} .dimension{font-size:185px;paint-order:stroke;stroke:#fff;stroke-width:65px;stroke-linejoin:round}.label{font-size:150px}.room-name{paint-order:stroke;stroke:#f0eee8;stroke-width:45px;stroke-linejoin:round}.room-area{font-size:175px;font-weight:600;fill:#147d69;paint-order:stroke;stroke:#f0eee8;stroke-width:40px}.room-size{font-size:145px;paint-order:stroke;stroke:#fff;stroke-width:45px;stroke-linejoin:round}.room-dim{fill:none;stroke:#75877f;stroke-width:.6}.hit{cursor:pointer}path,line,rect,polygon{vector-effect:non-scaling-stroke}.hit:focus{outline:none;stroke:#147d69;stroke-width:3}`;
+  const css=`.wall{fill:#d9dfdc;stroke:#354640;stroke-width:1.2}.selected{fill:#b5e2d7;stroke:#147d69;stroke-width:2}.opening{fill:#e6f1f5;stroke:#48798a;stroke-width:1.4}.door{fill:#fff;stroke:#9a754c;stroke-width:1.4}.fine{fill:none;stroke:#889790;stroke-width:.7}.canopy{fill:none;stroke:#53615d;stroke-width:1;stroke-dasharray:6 4}.canopy.selected{stroke:#147d69;stroke-width:2}.porch-post{fill:#f3f1e9;stroke:#8b9992;stroke-width:.7}.roof{fill:#d7dddd;stroke:#53615d;stroke-width:1}.floor{fill:#f0eee8;stroke:#a8afa9;stroke-width:1}.dim{fill:none;stroke:#647970;stroke-width:.7}.accent{fill:none;stroke:#147d69;stroke-width:1.5}text{font-family:system-ui,sans-serif;fill:#354640;font-size:180px} .dimension{font-size:185px;paint-order:stroke;stroke:#fff;stroke-width:65px;stroke-linejoin:round}.label{font-size:150px}.room-name{paint-order:stroke;stroke:#f0eee8;stroke-width:45px;stroke-linejoin:round}.room-area{font-size:175px;font-weight:600;fill:#147d69;paint-order:stroke;stroke:#f0eee8;stroke-width:40px}.room-size{font-size:145px;paint-order:stroke;stroke:#fff;stroke-width:45px;stroke-linejoin:round}.room-dim{fill:none;stroke:#75877f;stroke-width:.6}.hit{cursor:pointer}path,line,rect,polygon{vector-effect:non-scaling-stroke}.hit:focus{outline:none;stroke:#147d69;stroke-width:3}`;
   const line=(x1,y1,x2,y2,cls='fine')=>`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="${cls}"/>`;
   const rect=(x,y,w,h,cls,extra='')=>`<rect x="${x}" y="${y}" width="${Math.max(0,w)}" height="${Math.max(0,h)}" class="${cls}" ${extra}/>`;
   const text=(x,y,value,cls='label',extra='')=>`<text x="${x}" y="${y}" text-anchor="middle" class="${cls}" ${extra}>${esc(value)}</text>`;
@@ -37,14 +37,22 @@
     return out+'</g>';
   }
   function plan(m,floor,selection){
-    const h=m.house,z=H.floorZ(m,floor),st=m.stair;
+    const h=m.house,z=H.floorZ(m,floor),st=m.stair,canopy=H.porchRoofGeometry(m);
     let out='';
     out+=rect(0,0,h.split,h.depth,'floor');
     out+=rect(h.split,0,h.width-h.split,h.kitchenDepth,floor===1?'floor':'roof');
     out+=rect(h.split,h.kitchenDepth,h.width-h.split,h.depth-h.kitchenDepth,'floor');
     out+=text((h.split+h.width)/2,(h.depth+h.kitchenDepth)/2,`Терраса · основание −${h.terraceDrop} мм`);
-    out+=rect(m.porch.x,-m.porch.depth,m.porch.width,m.porch.depth,'floor');
+    out+=rect(m.porch.x,-m.porch.depth,m.porch.width,m.porch.depth,`floor hit ${selection?.type==='porch'?'selected':''}`,attr('porch',{id:'porch',name:'Крыльцо'}));
     out+=text(m.porch.x+m.porch.width/2,-m.porch.depth/2,'Крыльцо');
+    out+=`<g class="hit" ${attr('porch',{id:'porch',name:'Крыша главного входа'})}>`;
+    out+=rect(canopy.x1,canopy.y1,canopy.x2-canopy.x1,canopy.y2-canopy.y1,`canopy ${selection?.type==='porch'?'selected':''}`,`data-porch-roof-angle="${canopy.p.roofAngle}"`);
+    out+=text((canopy.x1+canopy.x2)/2,canopy.y1-140,`Козырёк · ${canopy.p.roofAngle}°`);
+    const arrowX=canopy.x2-190,arrowY=canopy.y1+250;
+    out+=line(arrowX,canopy.y2-100,arrowX,arrowY,'accent');
+    out+=poly([[arrowX,arrowY],[arrowX-55,arrowY+100],[arrowX+55,arrowY+100]],'opening');
+    out+='</g>';
+    if(selection?.type==='porch')out+=dimX(canopy.x1,canopy.x2,canopy.y1+210,canopy.y1)+dimY(canopy.y1,canopy.y2,canopy.x2+300,canopy.x2);
     for(const w of H.facadeWalls(m).filter(w=>w.baseHeight<=z+1200&&(floor===1||w.roof!=='low')))
       out+=rect(w.x1,w.y1,w.x2-w.x1,w.y2-w.y1,'wall');
     const active=m.walls.filter(w=>(w.floor===0||w.floor===floor)&&(floor===1||w.roof!=='low'));
@@ -77,13 +85,13 @@
     out+=line(st.x+100,st.y+st.width/2,st.x+st.length-100,st.y+st.width/2,'accent');
     out+=poly([[st.x+st.length-100,st.y+st.width/2],[st.x+st.length-300,st.y+st.width/2-90],[st.x+st.length-300,st.y+st.width/2+90]],'opening');
     out+=rooms.map(roomAnnotations).join('');
-    out+=dimX(0,h.width,-m.porch.depth-400,0)+dimX(0,h.split,h.depth+400,h.depth)+dimX(h.split,h.width,h.depth+400,h.depth);
+    out+=dimX(0,h.width,Math.min(-m.porch.depth,canopy.y1)-400,0)+dimX(0,h.split,h.depth+400,h.depth)+dimX(h.split,h.width,h.depth+400,h.depth);
     out+=dimY(0,h.depth,-450,0)+dimY(0,h.kitchenDepth,h.width+450,h.width)+dimY(h.kitchenDepth,h.depth,h.width+450,h.width);
     out+=text(h.width/2,h.depth+950,`${floor} этаж · пол ${z===0?'±0,000':'+'+(z/1000).toFixed(3)} м · расстояния между стенами, мм · площади в м²`);
     out+=text(h.width/2,h.depth+1400,floor===2?'Площади по полу; лестничный проём исключён.':'Площади по полу; лестница включена в площадь холла.');
     const e=h.facadeProjection??121;
     if(e){
-      out+=dimX(-e,h.width+e,-m.porch.depth-750,-e);
+      out+=dimX(-e,h.width+e,Math.min(-m.porch.depth,canopy.y1)-750,-e);
       out+=dimY(-e,h.depth+e,-850,-e);
       out+=text(h.width/2,h.depth+1200,`Выступ фасада наружу: ${fmt(e)} мм с каждой внешней стороны`);
     }
@@ -98,6 +106,25 @@
     return out;
   }
   const elevationPoint=(u,z)=>[u,-z];
+  function porchElevation(m,view,selection){
+    if(view==='back')return '';
+    const r=H.porchRoofGeometry(m),p=m.porch,selected=selection?.type==='porch'?'selected':'';
+    let out=`<g class="hit" ${attr('porch',{id:'porch',name:'Крыльцо и крыша входа'})}>`;
+    if(view==='front'){
+      out+=rect(p.x,0,p.width,m.house.base,'floor');
+      for(const x of [r.postLeft,r.postRight])out+=rect(x,-r.bottom(r.postY+100),100,r.bottom(r.postY+100),'porch-post');
+      out+=rect(r.x1,-r.top(r.y2),r.x2-r.x1,r.top(r.y2)-r.bottom(r.y1),`roof ${selected}`);
+      out+=line(r.x1,-r.top(r.y1),r.x2,-r.top(r.y1));
+      out+=text((r.x1+r.x2)/2,-r.top(r.y2)-120,`Козырёк ${r.p.roofAngle}°`);
+    }else{
+      out+=rect(-p.depth,0,p.depth,m.house.base,'floor');
+      const y=r.postY;
+      out+=poly([[y,0],[y+100,0],[y+100,-r.bottom(y+100)],[y,-r.bottom(y)]],'porch-post');
+      out+=poly([[r.y1,-r.bottom(r.y1)],[r.y2,-r.bottom(r.y2)],[r.y2,-r.top(r.y2)],[r.y1,-r.top(r.y1)]],`roof ${selected}`,`data-porch-roof-angle="${r.p.roofAngle}"`);
+    }
+    return out+'</g>';
+  }
+
   function elevation(m,view,selection){
     const h=m.house,top=H.mainTop(m,h.split),st=m.stair;
     let out='';
@@ -133,6 +160,7 @@
       out+=rect(0,0,view==='right'?h.kitchenDepth:width,h.base,'floor');
       if(view==='right')out+=rect(h.kitchenDepth,h.terraceDrop,h.depth-h.kitchenDepth,h.base-h.terraceDrop,'floor');
     }
+    out+=porchElevation(m,view,selection);
     out+=dimX(0,width,h.base+450,h.base)+dimY(-top,0,-600,0,fmt(top));
     out+=text(width/2,h.base+850,'Размеры окон — ширина × максимальная высота, мм');
     return out;
@@ -154,8 +182,13 @@
   function draw(m,view,selection){
     const h=m.house,planView=view==='plan1'||view==='plan2';
     const width=view==='left'||view==='right'?h.depth:h.width;
-    const roofMax=Math.max(H.mainTop(m,h.split+h.overhang),H.lowTop(m,h.split))+h.roofThickness;
-    const box=planView?[-1300,-m.porch.depth-1050,h.width+2600,h.depth+m.porch.depth+2700]:[-1400,-roofMax-600,width+2800,roofMax+h.base+1900];
+    const r=H.porchRoofGeometry(m),side=view==='left'||view==='right';
+    const roofMax=Math.max(H.mainTop(m,h.split+h.overhang),H.lowTop(m,h.split),r.top(r.y2))+h.roofThickness;
+    const minX=planView?Math.min(-1300,r.x1-700):side?Math.min(-1400,r.y1-600):view==='front'?Math.min(-1400,r.x1-600):-1400;
+    const maxX=planView?Math.max(h.width+1300,r.x2+700):view==='front'?Math.max(width+1400,r.x2+600):width+1400;
+    const minY=planView?Math.min(-m.porch.depth,r.y1)-1050:-roofMax-600;
+    const maxY=planView?h.depth+1650:h.base+1300;
+    const box=[minX,minY,maxX-minX,maxY-minY];
     const content=planView?plan(m,view==='plan1'?1:2,selection):view==='section'?section(m):elevation(m,view,selection);
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${box.join(' ')}" role="img" aria-label="Редактируемый чертёж дома"><style>${css}</style><rect x="${box[0]}" y="${box[1]}" width="${box[2]}" height="${box[3]}" fill="white"/>${content}</svg>`;
   }
