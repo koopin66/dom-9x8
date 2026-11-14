@@ -20,7 +20,7 @@ vm.runInContext(fs.readFileSync('./editor-drawings.js','utf8'),context);
 const view=window.createHouseView({appendChild(){},clientWidth:1000,clientHeight:700},()=>{});
 const model=H.clone(H.initial);
 view.update(model);
-function meshes(type,id){const result=[];scene.traverse(o=>{if(o.isMesh&&o.userData.entity?.type===type&&(!id||o.userData.entity.id===id))result.push(o);});return result;}
+function meshes(type,id){const result=[];scene.traverse(o=>{if(o.isMesh&&o.userData.entity?.type===type&&(!id||o.userData.entity.id===id)&&(type!=='opening'||!['opening-casing','window-sill'].includes(o.userData.part)))result.push(o);});return result;}
 function bounds(objects){const b=new T.Box3();objects.forEach(o=>b.expandByObject(o));return b;}
 function near(actual,expected){assert.ok(Math.abs(actual-expected)<1e-6,`${actual} != ${expected}`);}
 function checkFullOpenings(model){
@@ -40,6 +40,33 @@ function checkFullOpenings(model){
 const envelope=bounds(meshes('wall'));
 near(envelope.min.x,-.121);near(envelope.min.z,-.121);
 near(envelope.max.x,9.121);near(envelope.max.z,8.121);
+// Surface trims must stand beyond the 121 mm facade and leave openings clear.
+const casings=[],sills=[];
+scene.traverse(o=>{if(o.userData.part==='opening-casing')casings.push(o);if(o.userData.part==='window-sill')sills.push(o);});
+const exterior=model.openings.filter(o=>model.walls.find(w=>w.id===o.wallId).exterior&&['window','door','glazedDoor'].includes(o.kind));
+assert.equal(casings.length,exterior.length);assert.equal(sills.length,exterior.filter(o=>o.kind==='window').length);
+for(const mesh of casings){
+ const o=model.openings.find(o=>o.id===mesh.userData.entity.id),g=H.openingGeometry(model,o),b=bounds([mesh]);
+ const sign=['left','front','kf'].includes(g.w.id)?-1:1,axis=g.w.axis==='x'?'z':'x',face=H.openingFace(model,g.w)/1000;
+ near(sign>0?b.max[axis]:b.min[axis],face+sign*.02);
+ near(sign>0?b.min[axis]:b.max[axis],face-sign*.001);
+ const u=(g.a+g.b)/2000,z=(g.sill+(o.kind==='window'?o.height/2:10))/1000;
+ const origin=new T.Vector3(g.w.axis==='x'?u:face+sign*.2,z,g.w.axis==='x'?face+sign*.2:u);
+ const direction=g.w.axis==='x'?new T.Vector3(0,0,-sign):new T.Vector3(-sign,0,0);
+ assert.equal(new T.Raycaster(origin,direction,0,.5).intersectObject(mesh).length,0,'Casing blocks '+o.id);
+}
+for(const mesh of sills){
+ const o=model.openings.find(o=>o.id===mesh.userData.entity.id),g=H.openingGeometry(model,o),b=bounds([mesh]);
+ const sign=['left','front','kf'].includes(g.w.id)?-1:1,axis=g.w.axis==='x'?'z':'x',face=H.openingFace(model,g.w)/1000;
+ near(sign>0?b.max[axis]:b.min[axis],face+sign*.07);
+ const along=g.w.axis==='x'?'x':'z';near(b.min[along],(g.a-30)/1000);near(b.max[along],(g.b+30)/1000);
+ const finish=H.openingFinishGeometry(model,o),profile=finish.sill.profile;
+ near((profile[2][1]-profile[3][1])/(profile[3][0]-profile[2][0]),Math.tan(5*Math.PI/180));
+}
+for(const id of ['o12','o13']){
+ const finish=H.openingFinishGeometry(model,model.openings.find(o=>o.id===id)),p=finish.casing.outer;
+ near((p[3][1]-p[4][1])/(p[3][0]-p[4][0]),(model.house.atticHigh-model.house.atticLow)/model.house.split);
+}
 for(const o of model.openings.filter(o=>o.kind==='window'||o.kind==='glazedDoor')){
   const b=bounds(meshes('opening',o.id)),w=model.walls.find(w=>w.id===o.wallId),axis=w.axis==='x'?'z':'x';
   near(b.max[axis]-b.min[axis],.07);

@@ -8,7 +8,7 @@
     kitchenRise:1609.25, roofThickness:250, overhang:350, base:350, terraceDrop:50, facadeProjection:121};
   // Screen approximations of RAL 7024 Graphite grey and RAL 1014 Ivory.
   const defaultColors={roof:'#474a51',windowFrames:'#474a51',entranceDoor:'#474a51',
-    facade:'#ddc49a',foundation:'#474a51',columns:'#474a51'};
+    facade:'#ddc49a',foundation:'#474a51',columns:'#474a51',casings:'#474a51',sills:'#474a51'};
   const colorSettings=m=>({...defaultColors,...m.colors});
   const walls = [];
   function wall(id, name, x1, y1, x2, y2, floor, roof, exterior=false) {
@@ -121,6 +121,38 @@
     return {center,thickness,sign,face:center+sign*thickness/2,
       lo:center-thickness/2,hi:center+thickness/2,
       cutLo:Math.min(g.ax.lo,ax.lo),cutHi:Math.max(g.ax.hi,ax.hi)};
+  }
+  function openingFinishGeometry(m,o) {
+    const g=openingGeometry(m,o);
+    if(!g.w.exterior||!['window','door','glazedDoor'].includes(o.kind))return null;
+    if(g.w.id==='ridge'&&g.b<=m.house.kitchenDepth&&Math.max(g.head(g.a),g.head(g.b))<=lowTop(m,m.house.split)+m.house.roofThickness)return null;
+    const sign=['left','front','kf'].includes(g.w.id)?-1:1,face=openingFace(m,g.w),door=o.kind!=='window';
+    const width=door?100:80;
+    const top=[g.a,...g.corners.filter(u=>u>g.a&&u<g.b&&o.rakeDrop>0),g.b].map(u=>[u,g.head(u)]);
+    const inner=[[g.a,g.sill],[g.b,g.sill],...top.slice().reverse()];
+    // Intersect adjacent offset edges so raked heads keep a constant trim width.
+    const outer=inner.map((p,i)=>{
+      const prev=inner[(i+inner.length-1)%inner.length],next=inner[(i+1)%inner.length];
+      const a=[p[0]-prev[0],p[1]-prev[1]],b=[next[0]-p[0],next[1]-p[1]];
+      const la=Math.hypot(...a),lb=Math.hypot(...b);
+      const na=[a[1]/la,-a[0]/la],nb=[b[1]/lb,-b[0]/lb];
+      const aa=[p[0]+width*na[0],p[1]+width*na[1]],bb=[p[0]+width*nb[0],p[1]+width*nb[1]];
+      const det=a[0]*b[1]-a[1]*b[0];
+      if(Math.abs(det)<1e-8)return bb;
+      const t=((bb[0]-aa[0])*b[1]-(bb[1]-aa[1])*b[0])/det;
+      return [aa[0]+t*a[0],aa[1]+t*a[1]];
+    });
+    const casing={width,depth:21,center:face+sign*9.5,outer,inner,
+      polygon:door?[[outer[0][0],g.sill],[g.a,g.sill],...top,[g.b,g.sill],[outer[1][0],g.sill],...outer.slice(2)]:null};
+    let sill=null;
+    if(!door){
+      const placement=openingPlacement(m,o),rear=sign*(placement.face-face)-5,front=Math.max(70,rear+50),thickness=2;
+      const slope=Math.tan(5*Math.PI/180),rearTop=g.sill+5,frontTop=rearTop-(front-rear)*slope;
+      sill={a:g.a-30,b:g.b+30,angle:5,rear,front,rearTop,frontTop,
+        profile:[[rear,rearTop+15],[rear+thickness,rearTop+15],[rear+thickness,rearTop-thickness*slope],
+          [front,frontTop],[front,frontTop-15],[front-thickness,frontTop-15],[front-thickness,frontTop+thickness*slope-thickness],[rear,rearTop-thickness]]};
+    }
+    return {g,sign,face,casing,sill};
   }
   function alignUpperWindows(model) {
     const m=clone(model),slope=(m.house.atticHigh-m.house.atticLow)/m.house.split;
@@ -288,7 +320,7 @@
       stair:pick(value.stair,Object.keys(initial.stair)),porch:pick(porchSettings(value),Object.keys(initial.porch)),
       colors:pick(colorSettings(value),Object.keys(defaultColors))};
   }
-  const api={initial,clone,round,limits,defaultColors,colorSettings,porchLimits,porchSettings,porchRoofGeometry,floorZ,mainTop,lowTop,wallAxis,wallTop,facadeWalls,openingFace,openingGeometry,openingPlacement,alignUpperWindows,roomGeometry,resizeHouse,validate,canonical};
+  const api={initial,clone,round,limits,defaultColors,colorSettings,porchLimits,porchSettings,porchRoofGeometry,floorZ,mainTop,lowTop,wallAxis,wallTop,facadeWalls,openingFace,openingGeometry,openingPlacement,openingFinishGeometry,alignUpperWindows,roomGeometry,resizeHouse,validate,canonical};
   global.HouseModel=api;
   if(typeof module!=='undefined')module.exports=api;
 })(typeof window==='undefined'?globalThis:window);

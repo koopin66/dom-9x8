@@ -125,6 +125,18 @@
     return out+'</g>';
   }
 
+  function openingFinishes(m,o,selection){
+    const finish=H.openingFinishGeometry(m,o);if(!finish)return '';
+    const c=finish.casing,selected=chosen(selection,'opening',o.id)?'selected':'';
+    const path=points=>'M '+points.map(([u,z])=>u+','+(-z)).join(' L ')+' Z ';
+    const outline=c.polygon?path(c.polygon):path(c.outer)+path(c.inner);
+    let out=`<path d="${outline}" fill-rule="evenodd" class="exterior-casing hit ${selected}" data-casing-id="${esc(o.id)}" ${attr('opening',o)}/>`;
+    if(finish.sill){
+      const sill=finish.sill,lo=Math.min(...sill.profile.map(p=>p[1])),hi=Math.max(...sill.profile.map(p=>p[1]));
+      out+=rect(sill.a,-hi,sill.b-sill.a,hi-lo,`exterior-sill hit ${selected}`,`data-sill-id="${esc(o.id)}" ${attr('opening',o)}`);
+    }
+    return out;
+  }
   function elevation(m,view,selection){
     const h=m.house,top=H.mainTop(m,h.split),st=m.stair;
     let out='';
@@ -148,6 +160,7 @@
         out+=poly(shape.map(p=>elevationPoint(...p)),`${o.kind==='door'?'door exterior-door':'opening exterior-window'} hit ${chosen(selection,'opening',o.id)?'selected':''}`,attr('opening',o));
         if(o.kind==='window'||o.kind==='glazedDoor')for(let i=1;i<o.panels;i++){const u=g.a+o.width*i/o.panels;out+=line(u,-g.sill,u,-g.head(u),'exterior-sash');}
         out+=text((g.a+g.b)/2,-g.sill-90,`${fmt(o.width)} × ${fmt(o.height)}`,'dimension');
+        out+=openingFinishes(m,o,selection);
       }
     }
     if(view==='front'||view==='back'){
@@ -190,7 +203,7 @@
     const maxY=planView?h.depth+1650:h.base+1300;
     const box=[minX,minY,maxX-minX,maxY-minY];
     const colors=H.colorSettings(m);
-    const finishes=planView||view==='section'?'':`.wall{fill:${colors.facade}}.roof{fill:${colors.roof}}.plinth{fill:${colors.foundation}}.porch-post{fill:${colors.columns}}.exterior-window{stroke:${colors.windowFrames};stroke-width:2}.exterior-sash{stroke:${colors.windowFrames};stroke-width:2}.exterior-door{fill:${colors.entranceDoor};stroke:${colors.entranceDoor}}.selected{fill:#b5e2d7;stroke:#147d69}`;
+    const finishes=planView||view==='section'?'':`.wall{fill:${colors.facade}}.roof{fill:${colors.roof}}.plinth{fill:${colors.foundation}}.porch-post{fill:${colors.columns}}.exterior-window{stroke:${colors.windowFrames};stroke-width:2}.exterior-sash{stroke:${colors.windowFrames};stroke-width:2}.exterior-door{fill:${colors.entranceDoor};stroke:${colors.entranceDoor}}.exterior-casing{fill:${colors.casings};stroke:${colors.casings};stroke-width:.6}.exterior-sill{fill:${colors.sills};stroke:${colors.sills};stroke-width:.6}.selected{fill:#b5e2d7;stroke:#147d69}`;
     const content=planView?plan(m,view==='plan1'?1:2,selection):view==='section'?section(m):elevation(m,view,selection);
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${box.join(' ')}" role="img" aria-label="Редактируемый чертёж дома"><style>${css}${finishes}</style><rect x="${box[0]}" y="${box[1]}" width="${box[2]}" height="${box[3]}" fill="white"/>${content}</svg>`;
   }

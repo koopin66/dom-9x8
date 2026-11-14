@@ -28,7 +28,7 @@ global.createHouseView=function(host,onSelect){
   const C=H.defaultColors;
   const mat={wall:M(C.facade),wallIn:M(0xefebe3),roof:M(C.roof,{roughness:.55,metalness:.25}),seam:M(C.roof,{roughness:.5,metalness:.3}),
     plinth:M(C.foundation),deck:M(0xa47750),wood:M(0x8a603f),glass:M(0x91a4b1,{transparent:true,opacity:.83,roughness:.24,metalness:.12}),
-    sash:M(C.windowFrames),frame:M(C.windowFrames,{roughness:.6}),door:M(C.entranceDoor),column:M(C.columns,{roughness:.6}),roofUnder:M(C.roof,{roughness:.6}),doorIn:M(0xe7dfd2),slab:M(0xcfc8ba),floor:M(0xcbb08a),ground:M(0xa6aa98,{roughness:1}),
+    sash:M(C.windowFrames),frame:M(C.windowFrames,{roughness:.6}),door:M(C.entranceDoor),column:M(C.columns,{roughness:.6}),casing:M(C.casings,{roughness:.6}),sill:M(C.sills,{roughness:.5,metalness:.15}),roofUnder:M(C.roof,{roughness:.6}),doorIn:M(0xe7dfd2),slab:M(0xcfc8ba),floor:M(0xcbb08a),ground:M(0xa6aa98,{roughness:1}),
     stair:M(0xb4895c),furn:M(0xc8c2b6),soft:M(0x8796a1),dark:M(0x5c6468)};
   // Continuous courses across wall pieces and around openings (local vertical units: mm).
   mat.wall.onBeforeCompile=shader=>{
@@ -49,6 +49,28 @@ global.createHouseView=function(host,onSelect){
   const place=(mesh,along,t0,t1)=>{if(along==='X'){mesh.position.z=t0;}else{mesh.rotation.y=-Math.PI/2; mesh.position.x=t1;} return mesh;};
 
 
+  function addOpeningFinishes(model,opening){
+    const finish=H.openingFinishGeometry(model,opening);if(!finish)return;
+    const {g,sign,face,casing,sill}=finish,along=g.w.axis==='x'?'X':'Y';
+    let trim;
+    if(casing.polygon)trim=prism(casing.polygon,casing.depth,mat.casing);
+    else{
+      const outline=shape(casing.outer),hole=new THREE.Path();
+      casing.inner.slice().reverse().forEach(([x,y],i)=>i?hole.lineTo(x,y):hole.moveTo(x,y));outline.holes.push(hole);
+      trim=new THREE.Mesh(new THREE.ExtrudeGeometry(outline,{depth:casing.depth,bevelEnabled:false}),mat.casing);
+    }
+    trim.userData.part='opening-casing';
+    add(place(trim,along,casing.center-casing.depth/2,casing.center+casing.depth/2),root,false);
+    if(sill){
+      const panel=prism(sill.profile,sill.b-sill.a,mat.sill);panel.userData.part='window-sill';
+      if(along==='X'){
+        panel.rotation.y=-sign*Math.PI/2;panel.position.set(sign<0?sill.a:sill.b,0,face);
+      }else{
+        panel.rotation.y=sign<0?Math.PI:0;panel.position.set(face,0,sign<0?sill.b:sill.a);
+      }
+      add(panel,root,false);
+    }
+  }
   function disposeGroup(group){
     const geometries=new Set();
     group.traverse(o=>{if(o.geometry)geometries.add(o.geometry);});
@@ -66,7 +88,7 @@ global.createHouseView=function(host,onSelect){
   function update(model){
     select(null);
     const colors=H.colorSettings(model);
-    for(const [material,key] of Object.entries({wall:'facade',roof:'roof',roofUnder:'roof',seam:'roof',plinth:'foundation',sash:'windowFrames',frame:'windowFrames',door:'entranceDoor',column:'columns'}))
+    for(const [material,key] of Object.entries({wall:'facade',roof:'roof',roofUnder:'roof',seam:'roof',plinth:'foundation',sash:'windowFrames',frame:'windowFrames',door:'entranceDoor',column:'columns',casing:'casings',sill:'sills'}))
       mat[material].color.set(colors[key]).convertSRGBToLinear();
     if(root)disposeGroup(root);
     const previous=currentModel?.house;
@@ -103,9 +125,9 @@ global.createHouseView=function(host,onSelect){
     if(w.facade)continue;
     ops.forEach(o=>{
       entity={type:'opening',id:o.id};
+      const source=model.openings.find(item=>item.id===o.id);
       const pts=[[o.a,o.S(o.a)],[o.b,o.S(o.b)],[o.b,o.H(o.b)],[o.a,o.H(o.a)]];
       if(o.t==='win'||o.t==='slide'){
-        const source=model.openings.find(item=>item.id===o.id);
         const {sign,face,thickness,center}=H.openingPlacement(model,source);
         const corners=o.shape==='rake'?[o.cornerCoord]:[];
         function polygon(a,b,bottom,top){
@@ -121,10 +143,8 @@ global.createHouseView=function(host,onSelect){
           const frame=new THREE.Mesh(new THREE.ExtrudeGeometry(outline,{depth,bevelEnabled:false}),material);
           add(place(frame,along,offset-depth/2,offset+depth/2),root,false);
         }
-        const sill=o.S(o.a), casing=o.t==='slide'?62:52;
+        const sill=o.S(o.a);
         const cut=polygon(o.a,o.b,sill,o.H);
-        const trimDepth=Math.min(22,thickness);
-        ring(polygon(o.a-casing,o.b+casing,sill-(o.t==='slide'?8:44),x=>o.H(x)+casing),cut,trimDepth,face-sign*trimDepth/2,mat.frame);
         const clear=polygon(o.a+45,o.b-45,sill+45,x=>o.H(x)-45);
         ring(cut,clear,thickness,center,mat.frame);
         const divisions=o.panels;
@@ -138,6 +158,7 @@ global.createHouseView=function(host,onSelect){
       } else if(o.t==='door'){
         add(place(prism(pts,44,w.ext?mat.door:mat.doorIn),along,tc-22,tc+22),root,false);
       }
+      addOpeningFinishes(model,source);
     });
   }
 

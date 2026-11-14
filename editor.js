@@ -28,7 +28,7 @@
   const selectField=(key,label,value,options)=>`<label class="field wide"><span>${label}</span><select name="${key}">${options.map(([v,n])=>`<option value="${esc(v)}" ${String(v)===String(value)?'selected':''}>${esc(n)}</option>`).join('')}</select></label>`;
   const nameField=obj=>`<label class="field wide"><span>Название</span><input name="name" value="${esc(obj.name)}" maxlength="100" required></label>`;
   const colorLabels={roof:'Кровля и козырёк',windowFrames:'Оконные рамы',entranceDoor:'Входная дверь',
-    facade:'Фасад',foundation:'Фундамент и цоколь',columns:'Столбы террасы и входа'};
+    facade:'Фасад',foundation:'Фундамент и цоколь',columns:'Столбы террасы и входа',casings:'Наличники окон и дверей',sills:'Оконные отливы'};
   const colorPresets=[['#474a51','RAL 7024 · Графитовый серый'],['#383e42','RAL 7016 · Антрацитовый серый'],
     ['#ddc49a','RAL 1014 · Слоновая кость'],['#e6d2b5','RAL 1015 · Светлая слоновая кость'],
     ['#f6f6f6','RAL 9016 · Транспортный белый'],['#0a0a0a','RAL 9005 · Чёрный']];

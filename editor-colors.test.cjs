@@ -8,8 +8,12 @@ for(const value of [null,[],{roof:'red'},{roof:'#fff'},{columns:'#GGGGGG'},{faca
  const invalid=H.clone(H.initial);invalid.colors=value;assert.throws(()=>H.canonical(invalid));
 }
 const model=H.clone(H.initial);
-model.colors={roof:'#123456',windowFrames:'#e9ab34',entranceDoor:'#5a1122',facade:'#f1e8c1',foundation:'#203040',columns:'#d53388'};
+model.colors={...H.defaultColors,casings:'#8796a5',sills:'#cba321',roof:'#123456',windowFrames:'#e9ab34',entranceDoor:'#5a1122',facade:'#f1e8c1',foundation:'#203040',columns:'#d53388'};
 assert.deepEqual(H.canonical(JSON.parse(JSON.stringify(model))),model);
+const oldPalette=H.clone(model);delete oldPalette.colors.casings;delete oldPalette.colors.sills;
+const migratedColors=H.canonical(oldPalette).colors;
+assert.equal(migratedColors.casings,'#474a51');assert.equal(migratedColors.sills,'#474a51');
+for(const key of Object.keys(oldPalette.colors))assert.equal(migratedColors[key],oldPalette.colors[key]);
 let scene;
 T.WebGLRenderer=class{constructor(){this.shadowMap={};this.domElement={addEventListener(){},remove(){}};}setPixelRatio(){}setSize(){}dispose(){}render(s){scene=s;s.updateMatrixWorld(true);}};
 T.OrbitControls=class{constructor(){this.target=new T.Vector3();}addEventListener(){}update(){}dispose(){}};
@@ -26,7 +30,7 @@ function checkMaterials(m){
  const canopy=all.find(o=>o.userData.part==='porch-roof');
  const roofs=canopy.parent.children.filter(o=>o.isMesh);assert.equal(roofs.length,5);
  roofs.forEach(o=>assert.equal(hex(o),m.colors.roof,'Roof/underlay must not follow window color'));
- const frame=all.filter(o=>o.userData.entity?.type==='opening'&&m.openings.some(p=>p.id===o.userData.entity.id&&['window','glazedDoor'].includes(p.kind))&&!o.material.transparent);
+ const frame=all.filter(o=>o.userData.entity?.type==='opening'&&m.openings.some(p=>p.id===o.userData.entity.id&&['window','glazedDoor'].includes(p.kind))&&!o.material.transparent&&!['opening-casing','window-sill'].includes(o.userData.part));
  assert.ok(frame.length);frame.forEach(o=>assert.equal(hex(o),m.colors.windowFrames));
  const door=m.openings.find(o=>o.wallId==='front'&&o.kind==='door');
  assert.equal(hex(all.find(o=>o.userData.entity?.type==='opening'&&o.userData.entity.id===door.id)),m.colors.entranceDoor);
@@ -35,10 +39,12 @@ function checkMaterials(m){
  const base=all.find(o=>o.geometry.type==='BoxGeometry'&&o.geometry.parameters.width===m.house.split&&o.geometry.parameters.depth===m.house.depth&&o.geometry.parameters.height===m.house.base);
  assert.ok(base);assert.equal(hex(base),m.colors.foundation);
  assert.equal(hex(all.find(o=>o.userData.part==='porch-foundation')),m.colors.foundation);
+ const casings=all.filter(o=>o.userData.part==='opening-casing'),sills=all.filter(o=>o.userData.part==='window-sill');
+ assert.ok(casings.length);assert.ok(sills.length);casings.forEach(o=>assert.equal(hex(o),m.colors.casings));sills.forEach(o=>assert.equal(hex(o),m.colors.sills));
 }
 checkMaterials(H.initial);checkMaterials(model);checkMaterials(model);view.dispose();
 const defaults=H.defaultColors;
-for(const key of ['roof','windowFrames','entranceDoor','foundation','columns'])assert.equal(defaults[key],'#474a51');
+for(const key of ['roof','windowFrames','entranceDoor','foundation','columns','casings','sills'])assert.equal(defaults[key],'#474a51');
 assert.equal(defaults.facade,'#ddc49a');
 const svg=scope.HouseDrawings.draw(model,'front',null);
 for(const [selector,key] of [['wall','facade'],['roof','roof'],['plinth','foundation'],['porch-post','columns'],['exterior-door','entranceDoor']])assert.ok(svg.includes('.'+selector+'{fill:'+model.colors[key]));
