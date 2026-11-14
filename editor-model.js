@@ -30,7 +30,8 @@
     const base=w.axis==='x'?w.x1:w.y1;
     openings.push({id:'o'+(openings.length+1), name:(kind==='window'?'Окно':kind==='passage'?'Проём':'Дверь')+' '+(openings.length+1),
       wallId, offset:start-base, width, sill,height,kind,floor,shape,
-      rakeDrop:shape==='rake'?448.9:0, corner:.6875, panels:kind==='glazedDoor'?3:width>=1500?2:1, thickness:70});
+      rakeDrop:shape==='rake'?(house.atticHigh-house.atticLow)/house.split*width/2:0,
+      corner:shape==='rake'?0.5:.6875, panels:kind==='glazedDoor'?3:width>=1500?2:1, thickness:70});
   }
   [300,2300,3875].forEach(x=>opening('hall',x,900,0,2100,'door'));
   [300,3875].forEach(x=>opening('south',x,900,0,2100,'door'));
@@ -116,6 +117,15 @@
     return {center,thickness,sign,face:center+sign*thickness/2,
       lo:center-thickness/2,hi:center+thickness/2,
       cutLo:Math.min(g.ax.lo,ax.lo),cutHi:Math.max(g.ax.hi,ax.hi)};
+  }
+  function alignUpperWindows(model) {
+    const m=clone(model),slope=(m.house.atticHigh-m.house.atticLow)/m.house.split;
+    for(const id of ['o12','o13']){
+      const o=m.openings.find(o=>o.id===id),w=o&&m.walls.find(w=>w.id===o.wallId);
+      if(!o||o.floor!==2||o.kind!=='window'||w?.axis!=='x'||w.roof!=='main')throw new Error('Окна 12 и 13 должны находиться на втором этаже под основным скатом.');
+      Object.assign(o,{shape:'rake',corner:.5,rakeDrop:slope*o.width/2});
+    }
+    return canonical(m);
   }
   function roomGeometry(m,floor) {
     const h=m.house,st=m.stair,byId=id=>m.walls.find(w=>w.id===id);
@@ -270,7 +280,7 @@
       openings:value.openings.map(o=>pick({thickness:70,...o},Object.keys(openings[0]))),
       stair:pick(value.stair,Object.keys(initial.stair)),porch:pick(porchSettings(value),Object.keys(initial.porch))};
   }
-  const api={initial,clone,round,limits,porchLimits,porchSettings,porchRoofGeometry,floorZ,mainTop,lowTop,wallAxis,wallTop,facadeWalls,openingFace,openingGeometry,openingPlacement,roomGeometry,resizeHouse,validate,canonical};
+  const api={initial,clone,round,limits,porchLimits,porchSettings,porchRoofGeometry,floorZ,mainTop,lowTop,wallAxis,wallTop,facadeWalls,openingFace,openingGeometry,openingPlacement,alignUpperWindows,roomGeometry,resizeHouse,validate,canonical};
   global.HouseModel=api;
   if(typeof module!=='undefined')module.exports=api;
 })(typeof window==='undefined'?globalThis:window);

@@ -22,5 +22,25 @@ assert.deepEqual(restore,previous);
  assert.ok(!new URL(rewritten).searchParams.has('project'));
  assert.deepEqual(JSON.parse(values.get('dom-9x8-editor-v1')),project);
  el('undo').onclick();assert.deepEqual(JSON.parse(JSON.stringify(scope.houseEditor.snapshot())),previous);
- console.log('Passed roof-parallel window 13, midpoint kink, project import link, selection, persistence and undo.');
+ // A window-edit link must preserve current browser edits, including the canopy.
+ const custom=H.clone(project);Object.assign(custom.porch,{roofWidth:2100,roofHeight:3100,roofAngle:22});
+ custom.openings.find(o=>o.id==='o14').name='Моё окно спальни';
+ values.set('dom-9x8-editor-v1',JSON.stringify(custom));
+ ctx.location.href='https://koopin66.github.io/dom-9x8/?edit=window12-like13&opening=o12';
+ await vm.runInContext(fs.readFileSync('editor.js','utf8'),ctx);
+ const aligned=JSON.parse(JSON.stringify(scope.houseEditor.snapshot()));
+ assert.equal(requests,1,'Window edits must not import another project');
+ assert.equal(scope.houseEditor.getSelection().id,'o12');
+ assert.ok(!new URL(rewritten).searchParams.has('edit'));
+ for(const id of ['o12','o13']){
+  const o=aligned.openings.find(o=>o.id===id),g=H.openingGeometry(aligned,o);
+  assert.equal(o.corner,.5);
+  assert.ok(Math.abs((g.head(g.corner)-g.head(g.a))/(g.corner-g.a)-(aligned.house.atticHigh-aligned.house.atticLow)/aligned.house.split)<1e-12);
+ }
+ const original=H.clone(aligned);Object.assign(original.openings.find(o=>o.id==='o12'),custom.openings.find(o=>o.id==='o12'));
+ assert.deepEqual(original,custom,'Only window 12 needs a change in the supplied project');
+ assert.deepEqual(JSON.parse(values.get('dom-9x8-editor-v1')),aligned);
+ el('undo').onclick();assert.deepEqual(JSON.parse(JSON.stringify(scope.houseEditor.snapshot())),custom);
+ el('redo').onclick();assert.deepEqual(JSON.parse(JSON.stringify(scope.houseEditor.snapshot())),aligned);
+ console.log('Passed parallel windows 12/13, midpoint kinks, project import/edit links, preservation of current canopy settings, persistence and undo/redo.');
 })().catch(e=>{console.error(e);process.exitCode=1;});

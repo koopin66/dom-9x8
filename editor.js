@@ -227,6 +227,15 @@
       toast('Проект открыт. Предыдущий вариант можно вернуть кнопкой «Отменить».');
     }catch(e){toast('Проект по ссылке не загружен. '+e.message);}
   }
+  if(projectUrl.searchParams.get('edit')==='window12-like13'){
+    try{
+      if(commit(H.alignUpperWindows(model))){
+        projectUrl.searchParams.delete('edit');projectUrl.searchParams.set('opening','o12');
+        history.replaceState(null,'',projectUrl.href);
+        toast('Окна 12 и 13: излом на 50%, наклон параллелен крыше. Изменение можно отменить.');
+      }
+    }catch(e){toast('Окна не изменены. '+e.message);}
+  }
   try{view3d=createHouseView($('model'),select);}catch(e){$('model-message').textContent='3D недоступно в этом браузере. '+e.message;$('model-message').hidden=false;}
   inspect();render();updateButtons();
   const requestedOpening=projectUrl.searchParams.get('opening');
