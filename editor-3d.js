@@ -101,9 +101,8 @@ global.createHouseView=function(host,onSelect){
       entity={type:'opening',id:o.id};
       const pts=[[o.a,o.S(o.a)],[o.b,o.S(o.b)],[o.b,o.H(o.b)],[o.a,o.H(o.a)]];
       if(o.t==='win'||o.t==='slide'){
-        const sign=['left','front','kf'].includes(w.id)?-1:1;
-        const face=H.openingFace(model,w),thickness=o.thickness??70;
-        const center=face-sign*thickness/2;
+        const source=model.openings.find(item=>item.id===o.id);
+        const {sign,face,thickness,center}=H.openingPlacement(model,source);
         const corners=o.shape==='rake'?[o.cornerCoord]:[];
         function polygon(a,b,bottom,top){
           return [[a,bottom],[b,bottom],...[a,...corners.filter(x=>x>a&&x<b),b].reverse().map(x=>[x,top(x)])];

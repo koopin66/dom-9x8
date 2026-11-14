@@ -86,6 +86,19 @@
     const head=u=>sill+o.height-(o.shape==='rake'?o.rakeDrop*Math.max(0,(corner-u)/(corner-a)):0);
     return {w,ax,a,b,sill,head,corner,corners:o.shape==='rake'?[corner]:[]};
   }
+  function openingPlacement(m,o) {
+    const g=openingGeometry(m,o),u=(g.a+g.b)/2,z=(g.sill+g.head(u))/2;
+    const layer=facadeWalls(m).find(w=>{
+      const ax=wallAxis(w);
+      return w.id===o.wallId&&u>=ax.start&&u<=ax.end&&z>=w.baseHeight;
+    });
+    const ax=layer?wallAxis(layer):g.ax,thickness=o.thickness??70;
+    const sign=['left','front','kf'].includes(g.w.id)?-1:1;
+    const center=(ax.lo+ax.hi)/2;
+    return {center,thickness,sign,face:center+sign*thickness/2,
+      lo:center-thickness/2,hi:center+thickness/2,
+      cutLo:Math.min(g.ax.lo,ax.lo),cutHi:Math.max(g.ax.hi,ax.hi)};
+  }
   function mapPiece(value,oldBreak,oldEnd,newBreak,newEnd) {
     return value<=oldBreak?value*newBreak/oldBreak:newBreak+(value-oldBreak)*(newEnd-newBreak)/(oldEnd-oldBreak);
   }
@@ -160,7 +173,7 @@
       openings:value.openings.map(o=>pick({thickness:70,...o},Object.keys(openings[0]))),
       stair:pick(value.stair,Object.keys(initial.stair)),porch:pick(value.porch,Object.keys(initial.porch))};
   }
-  const api={initial,clone,round,limits,floorZ,mainTop,lowTop,wallAxis,wallTop,facadeWalls,openingFace,openingGeometry,resizeHouse,validate,canonical};
+  const api={initial,clone,round,limits,floorZ,mainTop,lowTop,wallAxis,wallTop,facadeWalls,openingFace,openingGeometry,openingPlacement,resizeHouse,validate,canonical};
   global.HouseModel=api;
   if(typeof module!=='undefined')module.exports=api;
 })(typeof window==='undefined'?globalThis:window);

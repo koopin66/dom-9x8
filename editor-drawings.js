@@ -30,18 +30,25 @@
     const active=m.walls.filter(w=>(w.floor===0||w.floor===floor)&&(floor===1||w.roof!=='low'));
     for(const w of active)out+=rect(w.x1,w.y1,w.x2-w.x1,w.y2-w.y1,`wall hit ${chosen(selection,'wall',w.id)?'selected':''}`,attr('wall',w));
     for(const o of m.openings.filter(o=>o.floor===floor)){
-      const {w,ax,a,b}=H.openingGeometry(m,o),horizontal=w.axis==='x',thick=ax.hi-ax.lo;
-      const x=horizontal?a:ax.lo,y=horizontal?ax.lo:a,ww=horizontal?b-a:thick,hh=horizontal?thick:b-a;
+      const {w,ax,a,b}=H.openingGeometry(m,o),horizontal=w.axis==='x',placement=H.openingPlacement(m,o);
+      const thick=placement.cutHi-placement.cutLo;
+      const x=horizontal?a:placement.cutLo,y=horizontal?placement.cutLo:a,ww=horizontal?b-a:thick,hh=horizontal?thick:b-a;
       const cls=o.kind==='door'||o.kind==='passage'?'door':'opening';
-      out+=rect(x,y,ww,hh,`${cls} hit ${chosen(selection,'opening',o.id)?'selected':''}`,attr('opening',o));
+      const selected=chosen(selection,'opening',o.id)?'selected':'';
+      out+=`<g class="hit" ${attr('opening',o)}>`;
+      out+=rect(x,y,ww,hh,`door ${cls==='door'?selected:''}`);
       if(o.kind==='window'||o.kind==='glazedDoor'){
-        if(horizontal)out+=line(a,(ax.lo+ax.hi)/2,b,(ax.lo+ax.hi)/2);
-        else out+=line((ax.lo+ax.hi)/2,a,(ax.lo+ax.hi)/2,b);
+        out+=rect(horizontal?a:placement.lo,horizontal?placement.lo:a,
+          horizontal?b-a:placement.thickness,horizontal?placement.thickness:b-a,
+          `opening ${selected}`,`data-window-frame="${esc(o.id)}"`);
+        if(horizontal)out+=line(a,placement.center,b,placement.center);
+        else out+=line(placement.center,a,placement.center,b);
       }
       if(o.kind==='door'){
         const depth=Math.min(o.width,900);
         out+=horizontal?line(a,ax.hi,a,ax.hi+depth):line(ax.hi,a,ax.hi+depth,a);
       }
+      out+='</g>';
     }
     const byId=id=>m.walls.find(w=>w.id===id);
     const left=byId('left')?.x2||0,right=byId('ridge')?.x1||h.split;

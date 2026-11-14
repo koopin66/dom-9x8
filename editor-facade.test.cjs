@@ -31,7 +31,11 @@ for(const o of model.openings.filter(o=>o.kind==='window'||o.kind==='glazedDoor'
   near(b.max[axis]-b.min[axis],.07);
   const ax=H.wallAxis(w),start=ax.start+o.offset+o.width/2;
   const face=H.openingFace(model,w),sign=['left','front','kf'].includes(w.id)?-1:1;
-  near(sign<0?b.min[axis]:b.max[axis],face/1000);
+  const oldFace=sign<0?ax.lo:ax.hi;
+  const layerLo=Math.min(oldFace,face)/1000,layerHi=Math.max(oldFace,face)/1000;
+  // Independent measured bounds: a 70 mm frame sits entirely in the added
+  // 121 mm wall, leaving exactly 25.5 mm on each side.
+  near(b.min[axis]-layerLo,.0255);near(layerHi-b.max[axis],.0255);
   // The added facade must leave the full opening clear through the wall.
   const origin=new T.Vector3(w.axis==='x'?start/1000:(face+sign*500)/1000,
     (H.floorZ(model,o.floor)+o.sill+o.height/2)/1000,w.axis==='x'?(face+sign*500)/1000:start/1000);
@@ -43,6 +47,9 @@ const changed=model.openings.find(o=>o.kind==='window');changed.thickness=95;
 view.update(model);
 const w=model.walls.find(w=>w.id===changed.wallId),b=bounds(meshes('opening',changed.id)),axis=w.axis==='x'?'z':'x';
 near(b.max[axis]-b.min[axis],.095);
+const changedAxis=H.wallAxis(w),changedSign=['left','front','kf'].includes(w.id)?-1:1;
+const changedOldFace=changedSign<0?changedAxis.lo:changedAxis.hi;
+near((b.min[axis]+b.max[axis])/2,(changedOldFace+changedSign*60.5)/1000);
 const resized=H.resizeHouse(model,{width:10000,depth:8500,split:5638.9,kitchenDepth:6375});
 view.update(resized);
 const resizedEnvelope=bounds(meshes('wall'));
@@ -58,7 +65,20 @@ for(const value of [null,-1,301,'70',Infinity]){
 for(const name of ['plan1','plan2','front','back','left','right','section']){
  const svg=window.HouseDrawings.draw(model,name,null);assert.ok(!/NaN|undefined/.test(svg));
  if(name==='plan1'){assert.ok(svg.includes('9 242'));assert.ok(svg.includes('121 мм'));}
+ if(name==='plan1'||name==='plan2'){
+  const floor=name==='plan1'?1:2;
+  for(const o of model.openings.filter(o=>o.floor===floor&&(o.kind==='window'||o.kind==='glazedDoor'))){
+   const wall=model.walls.find(w=>w.id===o.wallId),ax=H.wallAxis(wall);
+   const sign=['left','front','kf'].includes(wall.id)?-1:1;
+   const center=(sign<0?ax.lo:ax.hi)+sign*60.5;
+   const tag=svg.match(new RegExp('<rect[^>]*data-window-frame="'+o.id+'"[^>]*>'))?.[0];
+   assert.ok(tag,`Missing plan frame ${o.id}`);
+   const value=key=>Number(tag.match(new RegExp(key+'="([^"]+)"'))[1]);
+   near(value(wall.axis==='x'?'y':'x'),center-o.thickness/2);
+   near(value(wall.axis==='x'?'height':'width'),o.thickness);
+  }
+ }
 }
 model.house.facadeProjection=0;view.update(model);near(bounds(meshes('wall')).min.x,0);
 view.dispose();
-console.log('Passed facade extents, clear openings, exact 70/95 mm windows, resizing, legacy JSON, validation and SVG views.');
+console.log('Passed windows centered inside 121 mm facade in 3D and plans, exact 70/95 mm thickness, clear openings, resizing and JSON compatibility.');
