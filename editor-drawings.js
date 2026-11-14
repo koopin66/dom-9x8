@@ -18,12 +18,15 @@
   }
   function plan(m,floor,selection){
     const h=m.house,z=H.floorZ(m,floor),st=m.stair;
-    let out=rect(0,0,h.split,h.depth,'floor');
+    let out='';
+    out+=rect(0,0,h.split,h.depth,'floor');
     out+=rect(h.split,0,h.width-h.split,h.kitchenDepth,floor===1?'floor':'roof');
     out+=rect(h.split,h.kitchenDepth,h.width-h.split,h.depth-h.kitchenDepth,'floor');
     out+=text((h.split+h.width)/2,(h.depth+h.kitchenDepth)/2,`Терраса · основание −${h.terraceDrop} мм`);
     out+=rect(m.porch.x,-m.porch.depth,m.porch.width,m.porch.depth,'floor');
     out+=text(m.porch.x+m.porch.width/2,-m.porch.depth/2,'Крыльцо');
+    for(const w of H.facadeWalls(m).filter(w=>w.baseHeight<=z+1200&&(floor===1||w.roof!=='low')))
+      out+=rect(w.x1,w.y1,w.x2-w.x1,w.y2-w.y1,'wall');
     const active=m.walls.filter(w=>(w.floor===0||w.floor===floor)&&(floor===1||w.roof!=='low'));
     for(const w of active)out+=rect(w.x1,w.y1,w.x2-w.x1,w.y2-w.y1,`wall hit ${chosen(selection,'wall',w.id)?'selected':''}`,attr('wall',w));
     for(const o of m.openings.filter(o=>o.floor===floor)){
@@ -65,6 +68,12 @@
     out+=dimX(0,h.width,-m.porch.depth-400,0)+dimX(0,h.split,h.depth+400,h.depth)+dimX(h.split,h.width,h.depth+400,h.depth);
     out+=dimY(0,h.depth,-450,0)+dimY(0,h.kitchenDepth,h.width+450,h.width)+dimY(h.kitchenDepth,h.depth,h.width+450,h.width);
     out+=text(h.width/2,h.depth+950,`${floor} этаж · пол ${z===0?'±0,000':'+'+(z/1000).toFixed(3)} м · размеры в мм`);
+    const e=h.facadeProjection??121;
+    if(e){
+      out+=dimX(-e,h.width+e,-m.porch.depth-750,-e);
+      out+=dimY(-e,h.depth+e,-850,-e);
+      out+=text(h.width/2,h.depth+1200,`Выступ фасада наружу: ${fmt(e)} мм с каждой внешней стороны`);
+    }
     if(selection?.type==='wall'){
       const w=active.find(w=>w.id===selection.id);
       if(w){const a=H.wallAxis(w);out+=w.axis==='x'?dimX(a.start,a.end,a.lo-350,a.lo):dimY(a.start,a.end,a.lo-350,a.lo);}
@@ -80,6 +89,14 @@
     const h=m.house,top=H.mainTop(m,h.split),st=m.stair;
     let out='';
     const walls=view==='front'?['front','kf']:view==='back'?['back','kb']:view==='left'?['left']:['ridge','right'];
+    // Project the added facade envelope behind the existing elevations.
+    for(const w of H.facadeWalls(m).filter(w=>walls.includes(w.id))){
+      const side=view==='left'||view==='right',a=side?w.y1:w.x1===0?-(h.facadeProjection??121):w.x1,b=side?w.y2:w.x2;
+      const z1=H.wallTop(m,w,w.axis==='x'?w.x1:w.y1),z2=H.wallTop(m,w,w.axis==='x'?w.x2:w.y2);
+      const za=side?Math.max(z1,z2):H.wallTop(m,{...w,axis:'x'},a);
+      const zb=side?Math.max(z1,z2):H.wallTop(m,{...w,axis:'x'},b);
+      out+=poly([[a,w.baseHeight],[b,w.baseHeight],[b,zb],[a,za]].map(p=>elevationPoint(...p)),'wall');
+    }
     const width=view==='left'||view==='right'?h.depth:h.width;
     for(const id of walls){
       const w=m.walls.find(w=>w.id===id);if(!w)continue;
@@ -110,8 +127,9 @@
   function section(m){
     const h=m.house,st=m.stair,y=st.y+st.width/2,z2=H.floorZ(m,2);
     let out=rect(0,0,h.width,h.base,'floor');
-    for(const w of m.walls.filter(w=>w.y1<=y&&w.y2>=y)){
-      out+=poly([[w.x1,H.floorZ(m,w.floor)],[w.x2,H.floorZ(m,w.floor)],[w.x2,H.wallTop(m,w,w.axis==='x'?w.x2:y)],[w.x1,H.wallTop(m,w,w.axis==='x'?w.x1:y)]].map(p=>elevationPoint(...p)),'wall');
+    for(const w of [...m.walls,...H.facadeWalls(m)].filter(w=>w.y1<=y&&w.y2>=y)){
+      const base=w.baseHeight??H.floorZ(m,w.floor);
+      out+=poly([[w.x1,base],[w.x2,base],[w.x2,H.wallTop(m,w,w.axis==='x'?w.x2:y)],[w.x1,H.wallTop(m,w,w.axis==='x'?w.x1:y)]].map(p=>elevationPoint(...p)),'wall');
     }
     out+=rect(0,-z2,st.x,h.slab,'floor')+rect(st.x+st.length,-z2,h.split-st.x-st.length,h.slab,'floor');
     for(let i=0;i<st.steps-1;i++)out+=rect(st.x+i*st.length/(st.steps-1),-(i+1)*z2/st.steps,st.length/(st.steps-1),55,'floor');

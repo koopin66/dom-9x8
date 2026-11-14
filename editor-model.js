@@ -5,7 +5,7 @@
   const round = value => Math.round(value * 10) / 10;
   const house = {width:9000, depth:8000, split:5075, kitchenDepth:6000,
     ceiling:2700, slab:200, atticLow:1200, atticHigh:3271, kitchenEave:2900,
-    kitchenRise:1609.25, roofThickness:250, overhang:350, base:350, terraceDrop:50};
+    kitchenRise:1609.25, roofThickness:250, overhang:350, base:350, terraceDrop:50, facadeProjection:121};
   const walls = [];
   function wall(id, name, x1, y1, x2, y2, floor, roof, exterior=false) {
     walls.push({id, name, axis:x2-x1 >= y2-y1?'x':'y', x1,y1,x2,y2,floor,roof,exterior,height:0});
@@ -30,7 +30,7 @@
     const base=w.axis==='x'?w.x1:w.y1;
     openings.push({id:'o'+(openings.length+1), name:(kind==='window'?'Окно':kind==='passage'?'Проём':'Дверь')+' '+(openings.length+1),
       wallId, offset:start-base, width, sill,height,kind,floor,shape,
-      rakeDrop:shape==='rake'?448.9:0, corner:.6875, panels:kind==='glazedDoor'?3:width>=1500?2:1});
+      rakeDrop:shape==='rake'?448.9:0, corner:.6875, panels:kind==='glazedDoor'?3:width>=1500?2:1, thickness:70});
   }
   [300,2300,3875].forEach(x=>opening('hall',x,900,0,2100,'door'));
   [300,3875].forEach(x=>opening('south',x,900,0,2100,'door'));
@@ -51,7 +51,7 @@
     porch:{x:2100,width:1400,depth:1200}};
   const limits={width:[5000,20000],depth:[5000,20000],split:[2500,14000],kitchenDepth:[2500,18000],
     ceiling:[2200,4500],slab:[100,500],atticLow:[600,3000],atticHigh:[1800,6000],
-    kitchenEave:[2200,5000],kitchenRise:[0,4000],roofThickness:[100,600],overhang:[0,1200],base:[150,1200],terraceDrop:[0,250]};
+    kitchenEave:[2200,5000],kitchenRise:[0,4000],roofThickness:[100,600],overhang:[0,1200],base:[150,1200],terraceDrop:[0,250],facadeProjection:[0,1200]};
   const floorZ=(m,f)=>f===2?m.house.ceiling+m.house.slab:0;
   const mainTop=(m,x)=>floorZ(m,2)+m.house.atticLow+(m.house.atticHigh-m.house.atticLow)*x/m.house.split;
   const lowTop=(m,x)=>m.house.kitchenEave+m.house.kitchenRise*(m.house.width-x)/(m.house.width-m.house.split);
@@ -62,6 +62,22 @@
     const x=w.axis==='x'?u:(w.x1+w.x2)/2;
     if(w.height>0)return floorZ(m,w.floor)+w.height;
     return w.roof==='main'?mainTop(m,x):w.roof==='low'?lowTop(m,x):m.house.ceiling;
+  }
+  // Outer facade layer follows the L-shaped enclosed footprint, not internal joins.
+  function facadeWalls(m) {
+    const h=m.house,e=h.facadeProjection??121;
+    if(!e)return [];
+    const part=(id,x1,y1,x2,y2,baseHeight=0)=>({...m.walls.find(w=>w.id===id),x1,y1,x2,y2,baseHeight,facade:true});
+    return [part('left',-e,-e,0,h.depth+e),part('front',0,-e,h.split,0),
+      part('back',0,h.depth,h.split+e,h.depth+e),part('kf',h.split,-e,h.width+e,0),
+      part('right',h.width,0,h.width+e,h.kitchenDepth+e),
+      part('kb',h.split+e,h.kitchenDepth,h.width,h.kitchenDepth+e),
+      part('ridge',h.split,h.kitchenDepth,h.split+e,h.depth),
+      part('ridge',h.split,-e,h.split+e,h.kitchenDepth,lowTop(m,h.split)+h.roofThickness)];
+  }
+  function openingFace(m,w) {
+    const ax=wallAxis(w),sign=['left','front','kf'].includes(w.id)?-1:1;
+    return (sign<0?ax.lo:ax.hi)+(w.exterior?sign*(m.house.facadeProjection??121):0);
   }
   function openingGeometry(m,o) {
     const w=m.walls.find(item=>item.id===o.wallId), ax=wallAxis(w);
@@ -93,7 +109,7 @@
     const errors=[];
     const validNumber=v=>typeof v==='number'&&Number.isFinite(v);
     if(!m||m.schema!=='dom-editor'||m.version!==1||!m.house||!Array.isArray(m.walls)||!Array.isArray(m.openings))return ['Неизвестный формат проекта. Нужен JSON из этого редактора.'];
-    const h=m.house;
+    const h={facadeProjection:121,...m.house};
     for(const [key,[min,max]] of Object.entries(limits))if(!validNumber(h[key])||h[key]<min||h[key]>max)errors.push('Недопустимый параметр дома «'+key+'» ('+min+'…'+max+' мм).');
     if(h.width-h.split<1800||h.depth-h.kitchenDepth<500)errors.push('Крыло кухни должно быть шире 1800 мм, терраса глубже 500 мм.');
     if(h.atticHigh<h.atticLow||h.terraceDrop>=h.base)errors.push('Проверьте высоты ската и основания террасы.');
@@ -117,6 +133,7 @@
       const w=m.walls.find(w=>w.id===o.wallId);
       if(!w)return ['Проём ссылается на отсутствующую стену.'];
       if(!['offset','width','sill','height','rakeDrop','corner','panels'].every(k=>validNumber(o[k])))return ['Размеры проёмов должны быть числами.'];
+      if(o.thickness!==undefined&&(!validNumber(o.thickness)||o.thickness<20||o.thickness>300))errors.push(o.name+' — толщина окна должна быть от 20 до 300 мм.');
       if(![1,2].includes(o.floor)||!['window','door','glazedDoor','passage'].includes(o.kind)||!['rect','rake'].includes(o.shape)||!Number.isInteger(o.panels)||o.panels<1||o.panels>4||o.corner<.1||o.corner>1)return ['Некорректные свойства проёма.'];
       const g=openingGeometry(m,o);
       if(w.floor!==0&&w.floor!==o.floor)errors.push(o.name+' — этаж должен совпадать с этажом стены.');
@@ -138,12 +155,12 @@
     const errors=validate(value);if(errors.length)throw new Error(errors.slice(0,4).join('\n'));
     // Whitelist imported fields; no embedded markup, callbacks, or unknown state is retained.
     const pick=(obj,keys)=>Object.fromEntries(keys.map(k=>[k,obj[k]]));
-    return {schema:'dom-editor',version:1,house:pick(value.house,Object.keys(house)),
+    return {schema:'dom-editor',version:1,house:pick({facadeProjection:121,...value.house},Object.keys(house)),
       walls:value.walls.map(w=>pick(w,Object.keys(walls[0]))),
-      openings:value.openings.map(o=>pick(o,Object.keys(openings[0]))),
+      openings:value.openings.map(o=>pick({thickness:70,...o},Object.keys(openings[0]))),
       stair:pick(value.stair,Object.keys(initial.stair)),porch:pick(value.porch,Object.keys(initial.porch))};
   }
-  const api={initial,clone,round,limits,floorZ,mainTop,lowTop,wallAxis,wallTop,openingGeometry,resizeHouse,validate,canonical};
+  const api={initial,clone,round,limits,floorZ,mainTop,lowTop,wallAxis,wallTop,facadeWalls,openingFace,openingGeometry,resizeHouse,validate,canonical};
   global.HouseModel=api;
   if(typeof module!=='undefined')module.exports=api;
 })(typeof window==='undefined'?globalThis:window);

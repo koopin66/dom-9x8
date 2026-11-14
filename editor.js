@@ -27,7 +27,7 @@
   }
   const selectField=(key,label,value,options)=>`<label class="field wide"><span>${label}</span><select name="${key}">${options.map(([v,n])=>`<option value="${esc(v)}" ${String(v)===String(value)?'selected':''}>${esc(n)}</option>`).join('')}</select></label>`;
   const nameField=obj=>`<label class="field wide"><span>Название</span><input name="name" value="${esc(obj.name)}" maxlength="100" required></label>`;
-  const houseLabels={width:'Ширина дома, мм',depth:'Глубина дома, мм',split:'Двухэтажная часть, мм',kitchenDepth:'Глубина кухни, мм',ceiling:'Потолок 1 этажа, мм',slab:'Перекрытие, мм',atticLow:'Низ аттика, мм',atticHigh:'Верх аттика, мм',kitchenEave:'Низ крыши кухни, мм',kitchenRise:'Подъём крыши кухни, мм',roofThickness:'Толщина кровли, мм',overhang:'Свес кровли, мм',base:'Высота цоколя, мм',terraceDrop:'Перепад основания террасы, мм'};
+  const houseLabels={width:'Ширина дома, мм',depth:'Глубина дома, мм',split:'Двухэтажная часть, мм',kitchenDepth:'Глубина кухни, мм',ceiling:'Потолок 1 этажа, мм',slab:'Перекрытие, мм',atticLow:'Низ аттика, мм',atticHigh:'Верх аттика, мм',kitchenEave:'Низ крыши кухни, мм',kitchenRise:'Подъём крыши кухни, мм',roofThickness:'Толщина кровли, мм',overhang:'Свес кровли, мм',base:'Высота цоколя, мм',terraceDrop:'Перепад основания террасы, мм',facadeProjection:'Выступ фасада наружу, мм'};
   function objectList(){
     const opts=[['house:house','Дом и крыша'],['stair:stair','Лестница'],['porch:porch','Крыльцо']];
     const groups=[['Общие размеры',opts],['Стены',model.walls.map(w=>['wall:'+w.id,w.name])],['Окна и двери',model.openings.map(o=>['opening:'+o.id,`${o.name} · ${o.floor} эт.`])]];
@@ -63,6 +63,7 @@
       html+=numberField('offset','От начала стены, мм',o.offset)+numberField('sill','От пола этажа, мм',o.sill);
       html+=selectField('shape','Верх проёма',o.shape,[['rect','Горизонтальный'],['rake','Наклонный с изломом']]);
       if(o.shape==='rake')html+=numberField('rakeDrop','Понижение слева, мм',o.rakeDrop)+numberField('corner','Точка излома, % ширины',o.corner*100,{min:10,max:100});
+      if(o.kind==='window'||o.kind==='glazedDoor')html+=numberField('thickness','Толщина окна, мм',o.thickness,{min:20,max:300});
       html+=numberField('panels','Количество створок',o.panels,{min:1,max:4,step:1});
       html+='</div><p>Отступ отсчитывается слева направо для горизонтальной стены и сверху вниз для вертикальной. Высота задаётся до самой высокой точки проёма.</p>';
     }else if(selection.type==='stair'){
@@ -154,7 +155,7 @@
     const selectedWall=selection.type==='wall'?model.walls.find(w=>w.id===selection.id):selection.type==='opening'?model.walls.find(w=>w.id===model.openings.find(o=>o.id===selection.id).wallId):null;
     if(!selectedWall){toast('Выберите стену на плане или в списке, затем добавьте окно или дверь.');return;}
     const floor=selectedWall.floor|| (view==='plan2'?2:1),length=H.wallAxis(selectedWall).end-H.wallAxis(selectedWall).start;
-    const o={id:uniqueId('o'),name:kind==='window'?'Новое окно':'Новая дверь',wallId:selectedWall.id,offset:100,width:kind==='window'?800:900,sill:kind==='window'?900:0,height:kind==='window'?1000:2100,kind,floor,shape:'rect',rakeDrop:0,corner:.6875,panels:1};
+    const o={id:uniqueId('o'),name:kind==='window'?'Новое окно':'Новая дверь',wallId:selectedWall.id,offset:100,width:kind==='window'?800:900,sill:kind==='window'?900:0,height:kind==='window'?1000:2100,kind,floor,shape:'rect',rakeDrop:0,corner:.6875,panels:1,thickness:70};
     for(let offset=100;offset+o.width<=length-50;offset+=100){
       const next=H.clone(model);o.offset=offset;next.openings.push({...o});
       if(!H.validate(next).length){if(commit(next))select({type:'opening',id:o.id});return;}

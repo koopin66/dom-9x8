@@ -77,7 +77,7 @@ global.createHouseView=function(host,onSelect){
     roofG=new T.Group();root.add(roofG);
     const h=model.house,st=model.stair,p=model.porch;
     const high=x=>H.mainTop(model,x),low=x=>H.lowTop(model,x),f2=H.floorZ(model,2);
-    const WALLS=model.walls.map(w=>({...w,z0:H.floorZ(model,w.floor),ext:w.exterior,top:u=>H.wallTop(model,w,u)}));
+    const WALLS=[...model.walls,...H.facadeWalls(model)].map(w=>({...w,z0:w.baseHeight??H.floorZ(model,w.floor),ext:w.exterior,top:u=>H.wallTop(model,w,u)}));
     const OPEN=model.openings.map(o=>{
       const g=H.openingGeometry(model,o);
       return {...o,w:o.wallId,a:g.a,b:g.b,s:g.sill,h:g.head,cornerCoord:g.corner,t:({window:'win',glazedDoor:'slide',door:'door',passage:'open'})[o.kind]};
@@ -87,22 +87,23 @@ global.createHouseView=function(host,onSelect){
   for(const w of WALLS){
     entity={type:'wall',id:w.id};
     const ax=wallAxis(w), {along,u0,u1,t0,t1}=ax, tc=(t0+t1)/2;
-    const ops=OPEN.filter(o=>o.w===w.id).map(o=>Object.assign({},o,{S:K(o.s),H:K(o.h)}));
-    const bp=[...new Set([u0,u1,...ops.flatMap(o=>o.shape==='rake'?[o.a,o.cornerCoord,o.b]:[o.a,o.b])])].sort((a,b)=>a-b);
+    const ops=OPEN.filter(o=>o.w===w.id&&o.b>u0&&o.a<u1).map(o=>Object.assign({},o,{S:K(o.s),H:K(o.h)}));
+    const bp=[...new Set([u0,u1,...ops.flatMap(o=>o.shape==='rake'?[o.a,o.cornerCoord,o.b]:[o.a,o.b]).filter(u=>u>u0&&u<u1)])].sort((a,b)=>a-b);
     const wm=w.ext?mat.wall:mat.wallIn;
-    const piece=(p,q,Lo,Up)=>{if(Up(p)-Lo(p)<2&&Up(q)-Lo(q)<2) return; add(place(prism([[p,Lo(p)],[q,Lo(q)],[q,Up(q)],[p,Up(p)]],t1-t0,wm),along,t0,t1),root,false);};
+    const piece=(p,q,bottom,top)=>{const Lo=u=>Math.max(w.z0,bottom(u)),Up=u=>Math.min(w.top(u),top(u));if(Up(p)-Lo(p)<2&&Up(q)-Lo(q)<2) return; add(place(prism([[p,Lo(p)],[q,Lo(q)],[q,Up(q)],[p,Up(p)]],t1-t0,wm),along,t0,t1),root,false);};
     for(let i=0;i<bp.length-1;i++){
       const p=bp[i],q=bp[i+1],m=(p+q)/2;
       const cov=ops.filter(o=>o.a<=p+1&&o.b>=q-1).sort((a,b)=>a.S(m)-b.S(m));
       let lo=()=>w.z0; cov.forEach(o=>{piece(p,q,lo,o.S); lo=o.H;}); piece(p,q,lo,w.top);
     }
+    if(w.facade)continue;
     ops.forEach(o=>{
       entity={type:'opening',id:o.id};
       const pts=[[o.a,o.S(o.a)],[o.b,o.S(o.b)],[o.b,o.H(o.b)],[o.a,o.H(o.a)]];
       if(o.t==='win'||o.t==='slide'){
         const sign=['left','front','kf'].includes(w.id)?-1:1;
-        const face=sign<0?t0:t1;
-        const center=face-sign*43;
+        const face=H.openingFace(model,w),thickness=o.thickness??70;
+        const center=face-sign*thickness/2;
         const corners=o.shape==='rake'?[o.cornerCoord]:[];
         function polygon(a,b,bottom,top){
           return [[a,bottom],[b,bottom],...[a,...corners.filter(x=>x>a&&x<b),b].reverse().map(x=>[x,top(x)])];
@@ -119,16 +120,17 @@ global.createHouseView=function(host,onSelect){
         }
         const sill=o.S(o.a), casing=o.t==='slide'?62:52;
         const cut=polygon(o.a,o.b,sill,o.H);
-        ring(polygon(o.a-casing,o.b+casing,sill-(o.t==='slide'?8:44),x=>o.H(x)+casing),cut,22,face+sign*11,mat.frame);
+        const trimDepth=Math.min(22,thickness);
+        ring(polygon(o.a-casing,o.b+casing,sill-(o.t==='slide'?8:44),x=>o.H(x)+casing),cut,trimDepth,face-sign*trimDepth/2,mat.frame);
         const clear=polygon(o.a+45,o.b-45,sill+45,x=>o.H(x)-45);
-        ring(cut,clear,68,center,mat.frame);
+        ring(cut,clear,thickness,center,mat.frame);
         const divisions=o.panels;
         const width=(o.b-o.a-90)/divisions;
         for(let k=0;k<divisions;k++){
           const a=o.a+45+k*width,b=a+width;
           const pane=polygon(a+21,b-21,sill+67,x=>o.H(x)-67);
-          ring(polygon(a,b,sill+45,x=>o.H(x)-45),pane,32,center+sign*14,mat.sash);
-          profile(pane,12,center,mat.glass);
+          ring(polygon(a,b,sill+45,x=>o.H(x)-45),pane,thickness*.45,center+sign*thickness*.2,mat.sash);
+          profile(pane,Math.min(12,thickness*.2),center,mat.glass);
         }
       } else if(o.t==='door'){
         add(place(prism(pts,44,w.ext?mat.frame:mat.doorIn),along,tc-22,tc+22),root,false);
