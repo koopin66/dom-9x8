@@ -3,7 +3,7 @@
   const H=global.HouseModel;
   const esc=value=>String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const fmt=n=>Math.round(n).toLocaleString('ru-RU');
-  const css=`.wall{fill:#d9dfdc;stroke:#354640;stroke-width:1.2}.selected{fill:#b5e2d7;stroke:#147d69;stroke-width:2}.opening{fill:#e6f1f5;stroke:#48798a;stroke-width:1.4}.door{fill:#fff;stroke:#9a754c;stroke-width:1.4}.fine{fill:none;stroke:#889790;stroke-width:.7}.canopy{fill:none;stroke:#53615d;stroke-width:1;stroke-dasharray:6 4}.canopy.selected{stroke:#147d69;stroke-width:2}.porch-post{fill:#f3f1e9;stroke:#8b9992;stroke-width:.7}.roof{fill:#d7dddd;stroke:#53615d;stroke-width:1}.plinth{fill:#8f9395;stroke:#53615d;stroke-width:1}.floor{fill:#f0eee8;stroke:#a8afa9;stroke-width:1}.dim{fill:none;stroke:#647970;stroke-width:.7}.accent{fill:none;stroke:#147d69;stroke-width:1.5}text{font-family:system-ui,sans-serif;fill:#354640;font-size:180px} .dimension{font-size:185px;paint-order:stroke;stroke:#fff;stroke-width:65px;stroke-linejoin:round}.label{font-size:150px}.room-name{paint-order:stroke;stroke:#f0eee8;stroke-width:45px;stroke-linejoin:round}.room-area{font-size:175px;font-weight:600;fill:#147d69;paint-order:stroke;stroke:#f0eee8;stroke-width:40px}.room-size{font-size:145px;paint-order:stroke;stroke:#fff;stroke-width:45px;stroke-linejoin:round}.room-dim{fill:none;stroke:#75877f;stroke-width:.6}.hit{cursor:pointer}path,line,rect,polygon{vector-effect:non-scaling-stroke}.hit:focus{outline:none;stroke:#147d69;stroke-width:3}`;
+  const css=`.wall{fill:#d9dfdc;stroke:#354640;stroke-width:1.2}.selected{fill:#b5e2d7;stroke:#147d69;stroke-width:2}.opening{fill:#e6f1f5;stroke:#48798a;stroke-width:1.4}.door{fill:#fff;stroke:#9a754c;stroke-width:1.4}.fine{fill:none;stroke:#889790;stroke-width:.7}.canopy{fill:none;stroke:#53615d;stroke-width:1;stroke-dasharray:6 4}.canopy.selected{stroke:#147d69;stroke-width:2}.porch-post{fill:#f3f1e9;stroke:#8b9992;stroke-width:.7}.roof{fill:#d7dddd;stroke:#53615d;stroke-width:1}.plinth{fill:#8f9395;stroke:#53615d;stroke-width:1}.terrace-plan{fill:#e6f1f5;stroke:#474a51;stroke-width:1}.terrace-post{fill:#474a51;stroke:#354640;stroke-width:.7}.terrace-door{fill:none;stroke:#474a51;stroke-width:1.2}.floor{fill:#f0eee8;stroke:#a8afa9;stroke-width:1}.dim{fill:none;stroke:#647970;stroke-width:.7}.accent{fill:none;stroke:#147d69;stroke-width:1.5}text{font-family:system-ui,sans-serif;fill:#354640;font-size:180px} .dimension{font-size:185px;paint-order:stroke;stroke:#fff;stroke-width:65px;stroke-linejoin:round}.label{font-size:150px}.room-name{paint-order:stroke;stroke:#f0eee8;stroke-width:45px;stroke-linejoin:round}.room-area{font-size:175px;font-weight:600;fill:#147d69;paint-order:stroke;stroke:#f0eee8;stroke-width:40px}.room-size{font-size:145px;paint-order:stroke;stroke:#fff;stroke-width:45px;stroke-linejoin:round}.room-dim{fill:none;stroke:#75877f;stroke-width:.6}.hit{cursor:pointer}path,line,rect,polygon{vector-effect:non-scaling-stroke}.hit:focus{outline:none;stroke:#147d69;stroke-width:3}`;
   const line=(x1,y1,x2,y2,cls='fine')=>`<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" class="${cls}"/>`;
   const rect=(x,y,w,h,cls,extra='')=>`<rect x="${x}" y="${y}" width="${Math.max(0,w)}" height="${Math.max(0,h)}" class="${cls}" ${extra}/>`;
   const text=(x,y,value,cls='label',extra='')=>`<text x="${x}" y="${y}" text-anchor="middle" class="${cls}" ${extra}>${esc(value)}</text>`;
@@ -36,13 +36,36 @@
     }
     return out+'</g>';
   }
+  function terracePlan(m,selection){
+    const g=H.terraceGeometry(m);if(!g.p.enabled)return '';
+    const selected=selection?.type==='terrace'?'selected':'';
+    let out=`<g class="hit" ${attr('terrace',{id:'terrace',name:'Остекление террасы'})}>`;
+    for(const surface of g.surfaces){
+      const d=g.p.frameDepth;
+      out+=surface.axis==='x'?rect(surface.a,surface.normal-d/2,surface.b-surface.a,d,`terrace-plan ${selected}`):rect(surface.normal-d/2,surface.a,d,surface.b-surface.a,`terrace-plan ${selected}`);
+    }
+    for(const post of g.posts)out+=rect(post.x1,post.y1,post.x2-post.x1,post.y2-post.y1,'terrace-post');
+    const d=g.door,w=d.b-d.a;
+    out+=rect(d.a,d.normal-g.p.frameDepth/2,w,g.p.frameDepth,'floor');
+    out+=line(d.a,d.normal,d.b,d.normal,'terrace-door');
+    out+=line(d.a,d.normal,d.a,d.normal+w,'terrace-door');
+    out+=`<path d="M ${d.b},${d.normal} A ${w},${w} 0 0 1 ${d.a},${d.normal+w}" class="fine" data-terrace-entry="true"/>`;
+    out+=text((d.a+d.b)/2,d.normal-180,'Стеклянная дверь');
+    if(selection?.type==='terrace')out+=dimX(d.a,d.b,d.normal+500,d.normal);
+    return out+'</g>';
+  }
   function plan(m,floor,selection){
-    const h=m.house,z=H.floorZ(m,floor),st=m.stair,canopy=H.porchRoofGeometry(m);
+    const h=m.house,z=H.floorZ(m,floor),st=m.stair,canopy=H.porchRoofGeometry(m),terrace=H.terraceGeometry(m);
     let out='';
     out+=rect(0,0,h.split,h.depth,'floor');
     out+=rect(h.split,0,h.width-h.split,h.kitchenDepth,floor===1?'floor':'roof');
     out+=rect(h.split,h.kitchenDepth,h.width-h.split,h.depth-h.kitchenDepth,'floor');
-    out+=text((h.split+h.width)/2,(h.depth+h.kitchenDepth)/2,`Терраса · основание −${h.terraceDrop} мм`);
+    if(terrace.p.enabled){
+      const cx=(terrace.inner.x1+terrace.inner.x2)/2,cy=(terrace.inner.y1+terrace.inner.y2)/2;
+      out+=text(cx,cy-150,floor===1?'Остеклённая терраса':'Терраса · 1 этаж');
+      out+=text(cx,cy+75,terrace.area.toLocaleString('ru-RU',{minimumFractionDigits:2,maximumFractionDigits:2})+' м²','room-area',`data-terrace-area="${terrace.area}"`);
+      out+=text(cx,cy+290,`Основание −${h.terraceDrop} мм`);
+    }else out+=text((h.split+h.width)/2,(h.depth+h.kitchenDepth)/2,`Терраса · основание −${h.terraceDrop} мм`);
     out+=rect(m.porch.x,-m.porch.depth,m.porch.width,m.porch.depth,`floor hit ${selection?.type==='porch'?'selected':''}`,attr('porch',{id:'porch',name:'Крыльцо'}));
     out+=text(m.porch.x+m.porch.width/2,-m.porch.depth/2,'Крыльцо');
     out+=`<g class="hit" ${attr('porch',{id:'porch',name:'Крыша главного входа'})}>`;
@@ -85,15 +108,17 @@
     out+=line(st.x+100,st.y+st.width/2,st.x+st.length-100,st.y+st.width/2,'accent');
     out+=poly([[st.x+st.length-100,st.y+st.width/2],[st.x+st.length-300,st.y+st.width/2-90],[st.x+st.length-300,st.y+st.width/2+90]],'opening');
     out+=rooms.map(roomAnnotations).join('');
-    out+=dimX(0,h.width,Math.min(-m.porch.depth,canopy.y1)-400,0)+dimX(0,h.split,h.depth+400,h.depth)+dimX(h.split,h.width,h.depth+400,h.depth);
+    if(floor===1)out+=terracePlan(m,selection);
+    const bottomOffset=terrace.p.enabled&&floor===1?Math.max(400,terrace.p.doorWidth+250):400;
+    out+=dimX(0,h.width,Math.min(-m.porch.depth,canopy.y1)-400,0)+dimX(0,h.split,h.depth+bottomOffset,h.depth)+dimX(h.split,h.width,h.depth+bottomOffset,h.depth);
     out+=dimY(0,h.depth,-450,0)+dimY(0,h.kitchenDepth,h.width+450,h.width)+dimY(h.kitchenDepth,h.depth,h.width+450,h.width);
-    out+=text(h.width/2,h.depth+950,`${floor} этаж · пол ${z===0?'±0,000':'+'+(z/1000).toFixed(3)} м · расстояния между стенами, мм · площади в м²`);
-    out+=text(h.width/2,h.depth+1400,floor===2?'Площади по полу; лестничный проём исключён.':'Площади по полу; лестница включена в площадь холла.');
+    out+=text(h.width/2,h.depth+bottomOffset+550,`${floor} этаж · пол ${z===0?'±0,000':'+'+(z/1000).toFixed(3)} м · расстояния между стенами, мм · площади в м²`);
+    out+=text(h.width/2,h.depth+bottomOffset+1000,floor===2?'Площади по полу; лестничный проём исключён.':'Площади по полу; лестница включена в площадь холла.');
     const e=h.facadeProjection??121;
     if(e){
       out+=dimX(-e,h.width+e,Math.min(-m.porch.depth,canopy.y1)-750,-e);
       out+=dimY(-e,h.depth+e,-850,-e);
-      out+=text(h.width/2,h.depth+1200,`Выступ фасада наружу: ${fmt(e)} мм с каждой внешней стороны`);
+      out+=text(h.width/2,h.depth+bottomOffset+800,`Выступ фасада наружу: ${fmt(e)} мм с каждой внешней стороны`);
     }
     if(selection?.type==='wall'){
       const w=active.find(w=>w.id===selection.id);
@@ -137,6 +162,32 @@
     }
     return out;
   }
+  function terraceElevation(m,view,selection){
+    if(view!=='back'&&view!=='right')return '';
+    const g=H.terraceGeometry(m),selected=selection?.type==='terrace'?'selected':'';
+    const axis=view==='back'?'x':'y';
+    let out=`<g class="hit" ${attr('terrace',{id:'terrace',name:'Терраса и стеклянная дверь'})}>`;
+    const panel=(item,cls)=>{
+      const bottom=typeof item.bottom==='function'?item.bottom:()=>item.bottom;
+      return poly([[item.a,bottom(item.a)],[item.b,bottom(item.b)],[item.b,item.top(item.b)],[item.a,item.top(item.a)]].map(p=>elevationPoint(...p)),cls);
+    };
+    if(g.p.enabled){
+      for(const item of g.glass.filter(o=>o.axis===axis))out+=panel(item,`terrace-glass ${selected}`);
+      if(view==='back')out+=panel(g.door.glass,`terrace-glass ${selected}`);
+      for(const item of g.frames.filter(o=>o.axis===axis))out+=panel(item,`terrace-frame ${selected}`);
+      if(view==='back'){
+        for(const item of g.door.frames)out+=panel(item,`terrace-frame ${selected}`);
+        out+=rect(g.door.a,-g.floor-20,g.door.b-g.door.a,20,'terrace-frame');
+        out+=rect(g.door.b-100,-g.floor-1150,20,250,'terrace-frame','data-terrace-entry="true"');
+        out+=text((g.door.a+g.door.b)/2,-g.floor-350,`${fmt(g.p.doorWidth)} × ${fmt(g.p.doorHeight)}`,'room-size');
+      }
+    }
+    if(view==='back')for(const post of g.posts)out+=poly([[post.x1,g.floor],[post.x2,g.floor],[post.x2,H.lowTop(m,post.x2)],[post.x1,H.lowTop(m,post.x1)]].map(p=>elevationPoint(...p)),'terrace-post');
+    else{
+      const post=g.posts[1];out+=rect(post.y1,-H.lowTop(m,post.x2),post.y2-post.y1,H.lowTop(m,post.x2)-g.floor,'terrace-post');
+    }
+    return out+'</g>';
+  }
   function elevation(m,view,selection){
     const h=m.house,top=H.mainTop(m,h.split),st=m.stair;
     let out='';
@@ -174,6 +225,7 @@
       if(view==='right')out+=rect(h.kitchenDepth,h.terraceDrop,h.depth-h.kitchenDepth,h.base-h.terraceDrop,'plinth');
     }
     out+=porchElevation(m,view,selection);
+    out+=terraceElevation(m,view,selection);
     out+=dimX(0,width,h.base+450,h.base)+dimY(-top,0,-600,0,fmt(top));
     out+=text(width/2,h.base+850,'Размеры окон — ширина × максимальная высота, мм');
     return out;
@@ -200,10 +252,11 @@
     const minX=planView?Math.min(-1300,r.x1-700):side?Math.min(-1400,r.y1-600):view==='front'?Math.min(-1400,r.x1-600):-1400;
     const maxX=planView?Math.max(h.width+1300,r.x2+700):view==='front'?Math.max(width+1400,r.x2+600):width+1400;
     const minY=planView?Math.min(-m.porch.depth,r.y1)-1050:-roofMax-600;
-    const maxY=planView?h.depth+1650:h.base+1300;
+    const t=H.terraceSettings(m),bottomOffset=t.enabled&&view==='plan1'?Math.max(400,t.doorWidth+250):400;
+    const maxY=planView?h.depth+bottomOffset+1250:h.base+1300;
     const box=[minX,minY,maxX-minX,maxY-minY];
     const colors=H.colorSettings(m);
-    const finishes=planView||view==='section'?'':`.wall{fill:${colors.facade}}.roof{fill:${colors.roof}}.plinth{fill:${colors.foundation}}.porch-post{fill:${colors.columns}}.exterior-window{stroke:${colors.windowFrames};stroke-width:2}.exterior-sash{stroke:${colors.windowFrames};stroke-width:2}.exterior-door{fill:${colors.entranceDoor};stroke:${colors.entranceDoor}}.exterior-casing{fill:${colors.casings};stroke:${colors.casings};stroke-width:.6}.exterior-sill{fill:${colors.sills};stroke:${colors.sills};stroke-width:.6}.selected{fill:#b5e2d7;stroke:#147d69}`;
+    const finishes=planView||view==='section'?'':`.wall{fill:${colors.facade}}.roof{fill:${colors.roof}}.plinth{fill:${colors.foundation}}.porch-post{fill:${colors.columns}}.exterior-window{stroke:${colors.windowFrames};stroke-width:2}.exterior-sash{stroke:${colors.windowFrames};stroke-width:2}.exterior-door{fill:${colors.entranceDoor};stroke:${colors.entranceDoor}}.exterior-casing{fill:${colors.casings};stroke:${colors.casings};stroke-width:.6}.exterior-sill{fill:${colors.sills};stroke:${colors.sills};stroke-width:.6}.terrace-frame{fill:${colors.terraceGlazing};stroke:${colors.terraceGlazing};stroke-width:.6}.terrace-glass{fill:${colors.terraceGlazing};fill-opacity:${t.glassOpacity};stroke:${colors.terraceGlazing};stroke-opacity:.5;stroke-width:.6}.terrace-post{fill:${colors.columns}}.selected{fill:#b5e2d7;stroke:#147d69}`;
     const content=planView?plan(m,view==='plan1'?1:2,selection):view==='section'?section(m):elevation(m,view,selection);
     return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="${box.join(' ')}" role="img" aria-label="Редактируемый чертёж дома"><style>${css}${finishes}</style><rect x="${box[0]}" y="${box[1]}" width="${box[2]}" height="${box[3]}" fill="white"/>${content}</svg>`;
   }

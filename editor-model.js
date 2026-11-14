@@ -8,7 +8,7 @@
     kitchenRise:1609.25, roofThickness:250, overhang:350, base:350, terraceDrop:50, facadeProjection:121};
   // Screen approximations of RAL 7024 Graphite grey and RAL 1014 Ivory.
   const defaultColors={roof:'#474a51',windowFrames:'#474a51',entranceDoor:'#474a51',
-    facade:'#ddc49a',foundation:'#474a51',columns:'#474a51',casings:'#474a51',sills:'#474a51'};
+    facade:'#ddc49a',foundation:'#474a51',columns:'#474a51',casings:'#474a51',sills:'#474a51',terraceGlazing:'#474a51'};
   const colorSettings=m=>({...defaultColors,...m.colors});
   const walls = [];
   function wall(id, name, x1, y1, x2, y2, floor, roof, exterior=false) {
@@ -55,6 +55,8 @@
     stair:{x:1375,y:3860,length:3150,width:815,steps:15},
     porch:{x:2100,width:1400,depth:1200},colors:{...defaultColors}};
   Object.assign(initial.porch,porchSettings(initial));
+  initial.terrace=terraceSettings(initial);
+  const terraceLimits={doorWidth:[400,1800],doorHeight:[1800,2700],doorOffset:[0,20000],frameDepth:[40,120],glassOpacity:[.1,.8]};
   const porchLimits={roofWidth:[600,20000],roofDepth:[300,5000],roofAngle:[0,45],
     roofHeight:[2100,6000],roofThickness:[30,500],roofOffsetX:[-5000,5000]};
   const limits={width:[5000,20000],depth:[5000,20000],split:[2500,14000],kitchenDepth:[2500,18000],
@@ -63,6 +65,64 @@
   const floorZ=(m,f)=>f===2?m.house.ceiling+m.house.slab:0;
   const mainTop=(m,x)=>floorZ(m,2)+m.house.atticLow+(m.house.atticHigh-m.house.atticLow)*x/m.house.split;
   const lowTop=(m,x)=>m.house.kitchenEave+m.house.kitchenRise*(m.house.width-x)/(m.house.width-m.house.split);
+  function terraceSettings(m) {
+    const h=m.house,e=h.facadeProjection??121,start=h.split+e;
+    const bayStart=Math.max(start,h.split+(h.width-h.split)*.49+150),bayEnd=h.width-150,bay=bayEnd-bayStart;
+    const doorWidth=Math.max(400,Math.min(900,bay-120));
+    const center=Math.max(bayStart+60+doorWidth/2,Math.min(h.width-1100,bayEnd-60-doorWidth/2));
+    const lowest=h.kitchenEave-20-(25-h.terraceDrop),doorHeight=Math.max(1800,Math.min(2100,lowest-140));
+    return {enabled:bay>=520&&h.depth-h.kitchenDepth-e>180,doorWidth,doorHeight,
+      doorOffset:round(center-doorWidth/2-start),frameDepth:70,glassOpacity:.28,...m.terrace};
+  }
+  function terraceGeometry(m) {
+    const h=m.house,p=terraceSettings(m),e=h.facadeProjection??121,w=60;
+    const floor=25-h.terraceDrop,head=floor+p.doorHeight,xStart=h.split+e;
+    const postX=h.split+(h.width-h.split)*.49,back=h.depth-150;
+    const posts=[{x1:postX,x2:postX+150,y1:back,y2:h.depth},{x1:h.width-150,x2:h.width,y1:back,y2:h.depth}];
+    const bay={a:Math.max(xStart,postX+150),b:h.width-150};
+    const doorA=xStart+p.doorOffset,doorB=doorA+p.doorWidth;
+    const surfaces=[],frames=[],glass=[];
+    function surface(id,axis,a,b,normal,top,door=false){
+      if(b<=a)return;
+      const slope=(top(b)-top(a))/(b-a),topWidth=w*Math.sqrt(1+slope*slope);
+      const s={id,axis,a,b,normal,top,door};surfaces.push(s);
+      const bar=(a,b,bottom,upper,part='terrace-frame')=>{if(b>a)frames.push({surface:id,axis,a,b,normal,bottom,top:upper,part});};
+      const pane=(a,b,bottom,upper)=>{if(b-a>1&&Math.min(upper(a),upper(b))-bottom>1)glass.push({surface:id,axis,a,b,normal,bottom,top:upper,part:'terrace-glass'});};
+      bar(a,b,u=>top(u)-topWidth,top);
+      bar(a,b,()=>head,()=>head+w);
+      if(door){bar(a,doorA,()=>floor,()=>floor+w);bar(doorB,b,()=>floor,()=>floor+w);}
+      else bar(a,b,()=>floor,()=>floor+w);
+      function fixed(a,b){
+        if(b-a<1)return;
+        const count=Math.ceil((b-a)/1000),cuts=Array.from({length:count+1},(_,i)=>a+(b-a)*i/count);
+        for(let i=0;i<cuts.length;i++){
+          const lo=i===0?a:i===count?b-w:cuts[i]-w/2,hi=i===count?b:i===0?a+w:cuts[i]+w/2;
+          bar(lo,hi,()=>floor,top);
+        }
+        for(let i=0;i<count;i++){
+          const lo=cuts[i]+(i===0?w:w/2),hi=cuts[i+1]-(i===count-1?w:w/2);
+          pane(lo,hi,floor+w,()=>head);pane(lo,hi,head+w,u=>top(u)-topWidth);
+        }
+      }
+      if(door){fixed(a,doorA);fixed(doorB,b);pane(doorA,doorB,head+w,u=>top(u)-topWidth);}
+      else fixed(a,b);
+    }
+    if(p.enabled){
+      const frontY=h.depth-p.frameDepth/2;
+      surface('terrace-front-left','x',xStart,postX,frontY,u=>lowTop(m,u)-20);
+      surface('terrace-front-door','x',bay.a,bay.b,frontY,u=>lowTop(m,u)-20,true);
+      surface('terrace-side','y',h.kitchenDepth+e,back,h.width-p.frameDepth/2,()=>lowTop(m,h.width)-20);
+    }
+    const door={a:doorA,b:doorB,bottom:floor,top:head,normal:h.depth-p.frameDepth/2};
+    const la=doorA+4,lb=doorB-4,lz=floor+24,lt=head-4;
+    door.frames=[[la,la+45,lz,lt],[lb-45,lb,lz,lt],[la+45,lb-45,lz,lz+45],[la+45,lb-45,lt-45,lt]].map(([a,b,z,Z])=>
+      ({axis:'x',a,b,normal:door.normal,bottom:()=>z,top:()=>Z,part:'terrace-door-frame'}));
+    door.glass={axis:'x',a:la+45,b:lb-45,normal:door.normal,bottom:lz+45,top:()=>lt-45,part:'terrace-door-glass'};
+    const inner={x1:xStart,y1:h.kitchenDepth+e,x2:h.width-p.frameDepth,y2:h.depth-p.frameDepth};
+    let area=Math.max(0,inner.x2-inner.x1)*Math.max(0,inner.y2-inner.y1);
+    for(const post of posts)area-=Math.max(0,Math.min(inner.x2,post.x2)-Math.max(inner.x1,post.x1))*Math.max(0,Math.min(inner.y2,post.y2)-Math.max(inner.y1,post.y1));
+    return {p,floor,head,xStart,bay,posts,surfaces,frames,glass,door,inner,area:Math.max(0,area)/1e6};
+  }
   function porchSettings(m) {
     const p=m.porch,depth=Math.max(300,p.depth+125-(m.house.facadeProjection??121));
     return {roofWidth:p.width+150,roofDepth:depth,
@@ -249,7 +309,17 @@
     st.x=round(mx(st.x));st.y=round(my(st.y));
     const porch=porchSettings(m),porchWidth=round(mx(m.porch.x+m.porch.width)-mx(m.porch.x)),factor=porchWidth/m.porch.width;
     m.porch={...porch,width:porchWidth,x:round(mx(m.porch.x)),roofWidth:round(porch.roofWidth*factor),roofOffsetX:round(porch.roofOffsetX*factor)};
-    m.house=next;return m;
+    const terrace=terraceSettings(model),oldDoor=old.split+(old.facadeProjection??121)+terrace.doorOffset;
+    m.house=next;
+    m.terrace={...terrace,doorWidth:round(Math.max(400,Math.min(1800,terrace.doorWidth*(next.width-next.split)/(old.width-old.split)))),
+      doorOffset:round(mx(oldDoor)-next.split-(next.facadeProjection??121))};
+    const glazing=terraceGeometry(m),maxWidth=glazing.bay.b-glazing.bay.a-120;
+    if(m.terrace.enabled&&maxWidth>=400){
+      m.terrace.doorWidth=round(Math.min(m.terrace.doorWidth,maxWidth));
+      const door=Math.max(glazing.bay.a+60,Math.min(mx(oldDoor),glazing.bay.b-60-m.terrace.doorWidth));
+      m.terrace.doorOffset=round(door-glazing.xStart);
+    }
+    return m;
   }
   function validate(m) {
     const errors=[];
@@ -308,6 +378,17 @@
         if(roof.postRight-roof.postLeft<200||roof.postY+100>roof.y2)errors.push('Крыша входа должна перекрывать крыльцо в местах двух опор. Измените ширину, вылет или смещение крыши.');
       }
     }
+    if(m.terrace!==undefined&&(!m.terrace||typeof m.terrace!=='object'||Array.isArray(m.terrace)))errors.push('Неверный формат параметров террасы.');
+    else{
+      const t=terraceSettings(m);
+      if(typeof t.enabled!=='boolean'||Object.entries(terraceLimits).some(([key,[min,max]])=>!validNumber(t[key])||t[key]<min||t[key]>max))errors.push('Проверьте параметры остекления террасы и двери.');
+      else if(t.enabled){
+        const g=terraceGeometry(m);
+        if(g.door.a<g.bay.a+60-.1||g.door.b>g.bay.b-60+.1)errors.push('Дверь террасы должна помещаться между двумя столбами со стороны ступеней. Измените ширину или отступ двери.');
+        if(g.door.top+120>Math.min(lowTop(m,g.door.a),lowTop(m,g.door.b),lowTop(m,h.width))-20)errors.push('Дверь и остекление должны помещаться под крышей террасы. Уменьшите высоту двери.');
+        if(h.depth-h.kitchenDepth-(h.facadeProjection??121)<=180)errors.push('Недостаточно глубины террасы для остекления.');
+      }
+    }
     return [...new Set(errors)];
   }
   function canonical(value) {
@@ -318,9 +399,9 @@
       walls:value.walls.map(w=>pick(w,Object.keys(walls[0]))),
       openings:value.openings.map(o=>pick({thickness:70,...o},Object.keys(openings[0]))),
       stair:pick(value.stair,Object.keys(initial.stair)),porch:pick(porchSettings(value),Object.keys(initial.porch)),
-      colors:pick(colorSettings(value),Object.keys(defaultColors))};
+      colors:pick(colorSettings(value),Object.keys(defaultColors)),terrace:pick(terraceSettings(value),Object.keys(initial.terrace))};
   }
-  const api={initial,clone,round,limits,defaultColors,colorSettings,porchLimits,porchSettings,porchRoofGeometry,floorZ,mainTop,lowTop,wallAxis,wallTop,facadeWalls,openingFace,openingGeometry,openingPlacement,openingFinishGeometry,alignUpperWindows,roomGeometry,resizeHouse,validate,canonical};
+  const api={initial,clone,round,limits,defaultColors,colorSettings,terraceLimits,terraceSettings,terraceGeometry,porchLimits,porchSettings,porchRoofGeometry,floorZ,mainTop,lowTop,wallAxis,wallTop,facadeWalls,openingFace,openingGeometry,openingPlacement,openingFinishGeometry,alignUpperWindows,roomGeometry,resizeHouse,validate,canonical};
   global.HouseModel=api;
   if(typeof module!=='undefined')module.exports=api;
 })(typeof window==='undefined'?globalThis:window);

@@ -28,7 +28,7 @@ global.createHouseView=function(host,onSelect){
   const C=H.defaultColors;
   const mat={wall:M(C.facade),wallIn:M(0xefebe3),roof:M(C.roof,{roughness:.55,metalness:.25}),seam:M(C.roof,{roughness:.5,metalness:.3}),
     plinth:M(C.foundation),deck:M(0xa47750),wood:M(0x8a603f),glass:M(0x91a4b1,{transparent:true,opacity:.83,roughness:.24,metalness:.12}),
-    sash:M(C.windowFrames),frame:M(C.windowFrames,{roughness:.6}),door:M(C.entranceDoor),column:M(C.columns,{roughness:.6}),casing:M(C.casings,{roughness:.6}),sill:M(C.sills,{roughness:.5,metalness:.15}),roofUnder:M(C.roof,{roughness:.6}),doorIn:M(0xe7dfd2),slab:M(0xcfc8ba),floor:M(0xcbb08a),ground:M(0xa6aa98,{roughness:1}),
+    sash:M(C.windowFrames),frame:M(C.windowFrames,{roughness:.6}),door:M(C.entranceDoor),column:M(C.columns,{roughness:.6}),casing:M(C.casings,{roughness:.6}),sill:M(C.sills,{roughness:.5,metalness:.15}),roofUnder:M(C.roof,{roughness:.6}),terraceFrame:M(C.terraceGlazing,{roughness:.6}),terraceGlass:M(C.terraceGlazing,{transparent:true,opacity:.28,roughness:.14,metalness:.08,depthWrite:false,side:T.DoubleSide}),doorIn:M(0xe7dfd2),slab:M(0xcfc8ba),floor:M(0xcbb08a),ground:M(0xa6aa98,{roughness:1}),
     stair:M(0xb4895c),furn:M(0xc8c2b6),soft:M(0x8796a1),dark:M(0x5c6468)};
   // Continuous courses across wall pieces and around openings (local vertical units: mm).
   mat.wall.onBeforeCompile=shader=>{
@@ -71,6 +71,28 @@ global.createHouseView=function(host,onSelect){
       add(panel,root,false);
     }
   }
+  function addTerraceGlazing(model){
+    const g=H.terraceGeometry(model);if(!g.p.enabled)return;
+    const previous=entity;entity={type:'terrace',id:'terrace'};
+    function panel(item,material,depth){
+      const bottom=typeof item.bottom==='function'?item.bottom:()=>item.bottom;
+      const mesh=prism([[item.a,bottom(item.a)],[item.b,bottom(item.b)],[item.b,item.top(item.b)],[item.a,item.top(item.a)]],depth,material);
+      mesh.userData.part=item.part;mesh.userData.surface=item.surface;
+      if(material.transparent)mesh.renderOrder=1;
+      add(place(mesh,item.axis==='x'?'X':'Y',item.normal-depth/2,item.normal+depth/2),root,false,!material.transparent);
+    }
+    g.frames.forEach(item=>panel(item,mat.terraceFrame,g.p.frameDepth));
+    const glassDepth=Math.min(32,g.p.frameDepth-16);
+    g.glass.forEach(item=>panel(item,mat.terraceGlass,glassDepth));
+    g.door.frames.forEach(item=>panel(item,mat.terraceFrame,g.p.frameDepth-8));
+    panel(g.door.glass,mat.terraceGlass,Math.min(32,g.p.frameDepth-24));
+    const d=g.door;
+    const threshold=box(d.a,d.normal-g.p.frameDepth/2,d.bottom,d.b,d.normal+g.p.frameDepth/2,d.bottom+20,mat.terraceFrame);
+    threshold.userData.part='terrace-door-threshold';add(threshold,root,false);
+    const handle=box(d.b-100,d.normal+g.p.frameDepth/2+15,d.bottom+900,d.b-80,d.normal+g.p.frameDepth/2+40,d.bottom+1150,mat.terraceFrame);
+    handle.userData.part='terrace-door-handle';add(handle,root,false);
+    entity=previous;
+  }
   function disposeGroup(group){
     const geometries=new Set();
     group.traverse(o=>{if(o.geometry)geometries.add(o.geometry);});
@@ -88,8 +110,9 @@ global.createHouseView=function(host,onSelect){
   function update(model){
     select(null);
     const colors=H.colorSettings(model);
-    for(const [material,key] of Object.entries({wall:'facade',roof:'roof',roofUnder:'roof',seam:'roof',plinth:'foundation',sash:'windowFrames',frame:'windowFrames',door:'entranceDoor',column:'columns',casing:'casings',sill:'sills'}))
+    for(const [material,key] of Object.entries({wall:'facade',roof:'roof',roofUnder:'roof',seam:'roof',plinth:'foundation',sash:'windowFrames',frame:'windowFrames',door:'entranceDoor',column:'columns',casing:'casings',sill:'sills',terraceFrame:'terraceGlazing',terraceGlass:'terraceGlazing'}))
       mat[material].color.set(colors[key]).convertSRGBToLinear();
+    mat.terraceGlass.opacity=H.terraceSettings(model).glassOpacity;
     if(root)disposeGroup(root);
     const previous=currentModel?.house;
     if(previous&&(previous.width!==model.house.width||previous.depth!==model.house.depth)){
@@ -197,8 +220,11 @@ global.createHouseView=function(host,onSelect){
     }
     roof(-h.overhang,h.split+h.overhang,high);roof(h.split,h.width+h.overhang,low);
     const right=h.width-150,back=h.depth-150;
-    for(const [x,y] of [[h.split+(h.width-h.split)*.49,back],[right,back]])
-      solid(x,y,25-h.terraceDrop,x+150,y+150,low(x),mat.column);
+    for(const [x,y] of [[h.split+(h.width-h.split)*.49,back],[right,back]]){
+      const post=prism([[x,25-h.terraceDrop],[x+150,25-h.terraceDrop],[x+150,low(x+150)],[x,low(x)]],150,mat.column);
+      post.userData.part='terrace-post';add(place(post,'X',y,y+150),root,false);
+    }
+    addTerraceGlazing(model);
     entity={type:'porch',id:'porch'};
     const porchBase=solid(p.x,-p.depth,-h.base,p.x+p.width,0,-25,mat.plinth);
     porchBase.userData.part='porch-foundation';
@@ -242,6 +268,14 @@ global.createHouseView=function(host,onSelect){
     camera.position.set(cx+size*.65,r.p.roofHeight/1000+size*.35,cy-size*1.8);
     controls.update();render();
   }
+  function focusTerrace(){
+    if(!currentModel)return;
+    const h=currentModel.house,size=Math.max(h.width-h.split,h.depth-h.kitchenDepth,H.lowTop(currentModel,h.split))/1000;
+    const cx=(h.split+h.width)/2000,cy=(h.kitchenDepth+h.depth)/2000;
+    controls.target.set(cx,1.5,cy);
+    camera.position.set(cx+size*.75,H.lowTop(currentModel,h.split)/1000+1,h.depth/1000+size*1.55);
+    controls.update();render();
+  }
   const resize=()=>{const w=host.clientWidth,h=host.clientHeight;if(!w||!h)return;renderer.setSize(w,h);camera.aspect=w/h;camera.fov=2*Math.atan(Math.tan(20*Math.PI/180)/Math.min(1,camera.aspect))*180/Math.PI;camera.updateProjectionMatrix();render();};
   const observer=new ResizeObserver(resize);observer.observe(host);
   let down=null;
@@ -256,7 +290,7 @@ global.createHouseView=function(host,onSelect){
     if(hit?.object.userData.entity)onSelect(hit.object.userData.entity);
   });
   resize();controls.update();
-  return {update,select,setMode,render,focusPorch,
+  return {update,select,setMode,render,focusPorch,focusTerrace,
     dispose(){observer.disconnect();controls.dispose();if(root)disposeGroup(root);Object.values(mat).forEach(m=>m.dispose());edgeMat.dispose();renderer.dispose();renderer.domElement.remove();}};
 };
 })(window);

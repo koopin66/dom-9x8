@@ -34,17 +34,18 @@ function checkMaterials(m){
  assert.ok(frame.length);frame.forEach(o=>assert.equal(hex(o),m.colors.windowFrames));
  const door=m.openings.find(o=>o.wallId==='front'&&o.kind==='door');
  assert.equal(hex(all.find(o=>o.userData.entity?.type==='opening'&&o.userData.entity.id===door.id)),m.colors.entranceDoor);
- const posts=all.filter(o=>o.userData.part==='porch-post'||(o.geometry.type==='BoxGeometry'&&o.geometry.parameters.width===150&&o.geometry.parameters.depth===150&&o.geometry.parameters.height>2000));
+ const posts=all.filter(o=>o.userData.part==='porch-post'||o.userData.part==='terrace-post');
  assert.equal(posts.length,4);posts.forEach(o=>assert.equal(hex(o),m.colors.columns));
  const base=all.find(o=>o.geometry.type==='BoxGeometry'&&o.geometry.parameters.width===m.house.split&&o.geometry.parameters.depth===m.house.depth&&o.geometry.parameters.height===m.house.base);
  assert.ok(base);assert.equal(hex(base),m.colors.foundation);
  assert.equal(hex(all.find(o=>o.userData.part==='porch-foundation')),m.colors.foundation);
+ const glazing=all.filter(o=>o.userData.entity?.type==='terrace');assert.ok(glazing.length);glazing.forEach(o=>assert.equal(hex(o),m.colors.terraceGlazing));
  const casings=all.filter(o=>o.userData.part==='opening-casing'),sills=all.filter(o=>o.userData.part==='window-sill');
  assert.ok(casings.length);assert.ok(sills.length);casings.forEach(o=>assert.equal(hex(o),m.colors.casings));sills.forEach(o=>assert.equal(hex(o),m.colors.sills));
 }
 checkMaterials(H.initial);checkMaterials(model);checkMaterials(model);view.dispose();
 const defaults=H.defaultColors;
-for(const key of ['roof','windowFrames','entranceDoor','foundation','columns','casings','sills'])assert.equal(defaults[key],'#474a51');
+for(const key of ['roof','windowFrames','entranceDoor','foundation','columns','casings','sills','terraceGlazing'])assert.equal(defaults[key],'#474a51');
 assert.equal(defaults.facade,'#ddc49a');
 const svg=scope.HouseDrawings.draw(model,'front',null);
 for(const [selector,key] of [['wall','facade'],['roof','roof'],['plinth','foundation'],['porch-post','columns'],['exterior-door','entranceDoor']])assert.ok(svg.includes('.'+selector+'{fill:'+model.colors[key]));

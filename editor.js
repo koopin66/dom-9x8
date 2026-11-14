@@ -28,7 +28,7 @@
   const selectField=(key,label,value,options)=>`<label class="field wide"><span>${label}</span><select name="${key}">${options.map(([v,n])=>`<option value="${esc(v)}" ${String(v)===String(value)?'selected':''}>${esc(n)}</option>`).join('')}</select></label>`;
   const nameField=obj=>`<label class="field wide"><span>Название</span><input name="name" value="${esc(obj.name)}" maxlength="100" required></label>`;
   const colorLabels={roof:'Кровля и козырёк',windowFrames:'Оконные рамы',entranceDoor:'Входная дверь',
-    facade:'Фасад',foundation:'Фундамент и цоколь',columns:'Столбы террасы и входа',casings:'Наличники окон и дверей',sills:'Оконные отливы'};
+    facade:'Фасад',foundation:'Фундамент и цоколь',columns:'Столбы террасы и входа',casings:'Наличники окон и дверей',sills:'Оконные отливы',terraceGlazing:'Рамы и оттенок стёкол террасы'};
   // RAL 7023 screen value: https://tikkurila.com/colors/concrete-grey-ral-7023
   // Tikkurila screen values: https://tikkurila.com/colors/{name}-{number}
   const colorPresets=[['#474a51','RAL 7024 · Графитовый серый'],['#84847b','RAL 7023 · Серый бетон'],['#383e42','RAL 7016 · Антрацитовый серый'],
@@ -66,8 +66,12 @@
     mode='all';document.querySelectorAll('[data-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode==='all')));
     view3d?.setMode('all',false);view3d?.focusPorch();
   }
+  function showTerrace(){
+    mode='all';document.querySelectorAll('[data-mode]').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.mode==='all')));
+    view3d?.setMode('all',false);view3d?.focusTerrace();
+  }
   function objectList(){
-    const opts=[['house:house','Дом и крыша'],['colors:colors','Цвета дома'],['stair:stair','Лестница'],['porch:porch','Крыльцо']];
+    const opts=[['house:house','Дом и крыша'],['colors:colors','Цвета дома'],['terrace:terrace','Терраса и остекление'],['stair:stair','Лестница'],['porch:porch','Крыльцо']];
     const groups=[['Общие размеры',opts],['Стены',model.walls.map(w=>['wall:'+w.id,w.name])],['Окна и двери',model.openings.map(o=>['opening:'+o.id,`${o.name} · ${o.floor} эт.`])]];
     $('object').innerHTML=groups.map(([label,options])=>`<optgroup label="${label}">${options.map(([value,name])=>`<option value="${esc(value)}">${esc(name)}</option>`).join('')}</optgroup>`).join('');
     $('object').value=selection.type+':'+selection.id;
@@ -87,6 +91,14 @@
       html='<p>Выберите оттенок RAL или Tikkurila либо нажмите цветной образец, чтобы задать свой цвет. Изменения сразу видны на модели и фасадах.</p><div class="fields">';
       for(const [key,label] of Object.entries(colorLabels))html+=colorField(key,label,colors[key]);
       html+='</div><button type="button" id="colors-reset">Вернуть заданную палитру</button>';
+    }else if(selection.type==='terrace'){
+      const t=H.terraceSettings(model);
+      html='<p>Стеклянная дверь расположена со стороны ступеней. Верх остекления повторяет скат крыши, над дверью — стеклянная фрамуга.</p><div class="fields">';
+      html+=selectField('enabled','Остекление террасы',String(t.enabled),[['true','Включено'],['false','Выключено']]);
+      for(const [key,label] of Object.entries({doorWidth:'Проём двери, мм',doorHeight:'Высота двери, мм',doorOffset:'Отступ двери слева, мм',frameDepth:'Толщина профиля, мм'}))
+        html+=numberField(key,label,t[key],{min:H.terraceLimits[key][0],max:H.terraceLimits[key][1]});
+      html+=numberField('glassOpacity','Тонировка стекла, %',t.glassOpacity*100,{min:10,max:80,wide:true});
+      html+='</div><p>Отступ двери измеряется от стены двухэтажной части. Цвет рам и стекла задаётся в разделе «Цвета дома».</p><button type="button" id="terrace-focus">Показать террасу в 3D</button>';
     }else if(selection.type==='wall'){
       const w=model.walls.find(w=>w.id===selection.id),ax=H.wallAxis(w);
       html='<div class="fields">'+nameField(w);
@@ -123,6 +135,7 @@
     $('properties').innerHTML=html;
     if(selection.type==='colors')$('colors-reset').onclick=()=>{const next=H.clone(model);next.colors=H.clone(H.defaultColors);commit(next,true);};
     if(selection.type==='porch')$('porch-focus').onclick=showPorch;
+    if(selection.type==='terrace')$('terrace-focus').onclick=showTerrace;
     const canDelete=selection.type==='opening'||(selection.type==='wall'&&!model.walls.find(w=>w.id===selection.id).exterior);
     $('delete').hidden=!canDelete;$('error').hidden=true;
   }
@@ -143,6 +156,8 @@
       next=H.resizeHouse(model,values);
     }else if(selection.type==='colors'){
       next.colors=Object.fromEntries(Object.keys(H.defaultColors).map(key=>[key,values[key]]));
+    }else if(selection.type==='terrace'){
+      next.terrace={...model.terrace,...values,enabled:values.enabled==='true',glassOpacity:values.glassOpacity/100};
     }else if(selection.type==='wall'){
       const w=next.walls.find(w=>w.id===selection.id),old=H.wallAxis(w);
       w.name=values.name;
@@ -180,6 +195,7 @@
     if(item.type==='opening')view=model.openings.find(o=>o.id===item.id).floor===2?'plan2':'plan1';
     if(item.type==='wall'){const w=model.walls.find(w=>w.id===item.id);if(w.floor===2)view='plan2';else if(w.floor===1)view='plan1';}
     if(item.type==='porch')view='plan1';
+    if(item.type==='terrace')view='plan1';
     $('drawing-view').value=view;inspect();draw();view3d?.select(selection);
   }
   function draw(){
@@ -196,9 +212,10 @@
   }
   function render(){
     const h=model.house;
+    const terrace=H.terraceGeometry(model),terraceArea=terrace.p.enabled?terrace.area:(h.width-h.split)*(h.depth-h.kitchenDepth)/1e6;
     $('title').textContent=`Дом ${(h.width/1000).toLocaleString('ru-RU')} × ${(h.depth/1000).toLocaleString('ru-RU')}`;
     $('summary').textContent=`${f(h.width)} × ${f(h.depth)} мм · две части ${f(h.split)} + ${f(h.width-h.split)} мм`;
-    $('metrics').innerHTML=`<span>Пятно застройки <strong>${(h.width*h.depth/1e6).toLocaleString('ru-RU',{maximumFractionDigits:2})} м²</strong></span><span>Терраса <strong>${((h.width-h.split)*(h.depth-h.kitchenDepth)/1e6).toLocaleString('ru-RU',{maximumFractionDigits:2})} м²</strong></span><span>Основание террасы <strong>−${h.terraceDrop} мм</strong></span><span>Пол 2 этажа <strong>+${f(H.floorZ(model,2))} мм</strong></span>`;
+    $('metrics').innerHTML=`<span>Пятно застройки <strong>${(h.width*h.depth/1e6).toLocaleString('ru-RU',{maximumFractionDigits:2})} м²</strong></span><span>${terrace.p.enabled?'Терраса внутри остекления':'Терраса'} <strong>${terraceArea.toLocaleString('ru-RU',{maximumFractionDigits:2})} м²</strong></span><span>Основание террасы <strong>−${h.terraceDrop} мм</strong></span><span>Пол 2 этажа <strong>+${f(H.floorZ(model,2))} мм</strong></span>`;
     draw();
     const roofSummary=$('porch-roof-summary');if(roofSummary)roofSummary.textContent=porchSummary();
     if(view3d){try{view3d.update(model);view3d.select(selection);}catch(e){$('model-message').textContent='Ошибка построения 3D. '+e.message;$('model-message').hidden=false;console.error(e);}}
@@ -279,6 +296,7 @@
   if(model.openings.some(o=>o.id===requestedOpening))select({type:'opening',id:requestedOpening});
   if(projectUrl.searchParams.get('object')==='porch'){select({type:'porch',id:'porch'});showPorch();}
   if(projectUrl.searchParams.get('object')==='colors')select({type:'colors',id:'colors'});
+  if(projectUrl.searchParams.get('object')==='terrace'){select({type:'terrace',id:'terrace'});showTerrace();}
   // Read-only snapshot for diagnostics and acceptance checks.
   window.houseEditor={snapshot:()=>H.clone(model),getSelection:()=>({...selection})};
 })();
