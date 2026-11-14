@@ -57,7 +57,7 @@ assert.equal(scope.HouseDrawings.draw(model,'plan1',null),scope.HouseDrawings.dr
  const environment=vm.createContext({window:ui,document:{getElementById:el,querySelectorAll(){return [];}},URL,location:{href:'https://koopin66.github.io/dom-9x8/?object=colors'},localStorage:{getItem:k=>storage.get(k),setItem:(k,v)=>storage.set(k,v)},setTimeout(){return 1;},clearTimeout(){},console,createHouseView(){return {update(){},select(){}};}});
  vm.runInContext(fs.readFileSync('editor-drawings.js','utf8'),environment);environment.HouseDrawings=ui.HouseDrawings;
  await vm.runInContext(fs.readFileSync('editor.js','utf8'),environment);
- assert.equal(ui.houseEditor.getSelection().type,'colors');assert.equal(el('parameter-unit').textContent,'RAL / HEX');
+ assert.equal(ui.houseEditor.getSelection().type,'colors');assert.equal(el('parameter-unit').textContent,'Каталог / HEX');
  for(const key of Object.keys(defaults)){
   assert.ok(el('properties').innerHTML.includes('name="'+key+'"'));
   const picker=el('color-'+key),preset=el('color-preset-'+key);

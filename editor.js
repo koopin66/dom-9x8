@@ -30,16 +30,21 @@
   const colorLabels={roof:'Кровля и козырёк',windowFrames:'Оконные рамы',entranceDoor:'Входная дверь',
     facade:'Фасад',foundation:'Фундамент и цоколь',columns:'Столбы террасы и входа',casings:'Наличники окон и дверей',sills:'Оконные отливы'};
   // RAL 7023 screen value: https://tikkurila.com/colors/concrete-grey-ral-7023
+  // Tikkurila screen values: https://tikkurila.com/colors/{name}-{number}
   const colorPresets=[['#474a51','RAL 7024 · Графитовый серый'],['#84847b','RAL 7023 · Серый бетон'],['#383e42','RAL 7016 · Антрацитовый серый'],
     ['#ddc49a','RAL 1014 · Слоновая кость'],['#e6d2b5','RAL 1015 · Светлая слоновая кость'],
-    ['#f6f6f6','RAL 9016 · Транспортный белый'],['#0a0a0a','RAL 9005 · Чёрный']];
+    ['#f6f6f6','RAL 9016 · Транспортный белый'],['#0a0a0a','RAL 9005 · Чёрный'],
+    ['#ebe9e2','Tikkurila 2686 · Tuulikki'],['#d9d5c7','Tikkurila 2687 · Kuutar'],
+    ['#969067','Tikkurila 2678 · Suvetar'],['#465e6e','Tikkurila 2685 · Ahti'],
+    ['#8e9b9d','Tikkurila 2683 · Vuoksi'],['#9fa194','Tikkurila 2689 · Väinämöinen'],
+    ['#acada7','Tikkurila 2688 · Sariola'],['#949785','Tikkurila 2677 · Hiisi']];
   function colorCaption(color){
     const preset=colorPresets.find(([hex])=>hex===color.toLowerCase());
     return (preset?preset[1].split(' · ')[0]+' · ':'')+color.toUpperCase();
   }
   function colorField(key,label,value){
     const color=value.toLowerCase(),known=colorPresets.some(([hex])=>hex===color);
-    return `<div class="field wide color-field"><label for="color-${key}">${label}</label><div class="color-controls"><input type="color" id="color-${key}" name="${key}" value="${color}" data-color-key="${key}"><select id="color-preset-${key}" name="preset_${key}" data-color-preset="${key}" aria-label="Оттенок RAL: ${label}">${colorPresets.map(([hex,name])=>`<option value="${hex}" ${hex===color?'selected':''}>${name}</option>`).join('')}<option value="custom" ${known?'':'selected'}>Свой цвет</option></select></div><small id="color-value-${key}">${colorCaption(color)}</small></div>`;
+    return `<div class="field wide color-field"><label for="color-${key}">${label}</label><div class="color-controls"><input type="color" id="color-${key}" name="${key}" value="${color}" data-color-key="${key}"><select id="color-preset-${key}" name="preset_${key}" data-color-preset="${key}" aria-label="Оттенок каталога: ${label}">${colorPresets.map(([hex,name])=>`<option value="${hex}" ${hex===color?'selected':''}>${name}</option>`).join('')}<option value="custom" ${known?'':'selected'}>Свой цвет</option></select></div><small id="color-value-${key}">${colorCaption(color)}</small></div>`;
   }
   function syncColorControls(event){
     if(selection.type!=='colors')return;
@@ -69,7 +74,7 @@
   }
   function inspect(){
     clearTimeout(timer);objectList();let html='';
-    $('parameter-unit').textContent=selection.type==='colors'?'RAL / HEX':'мм';
+    $('parameter-unit').textContent=selection.type==='colors'?'Каталог / HEX':'мм';
     if(selection.type==='house'){
       const h=model.house;
       html='<p>Ширина и глубина пропорционально масштабируют план, толщины стен и проёмы. Высоты задаются отдельно. Размер части дома перемещает границу между объёмами.</p><div class="fields">';
@@ -79,7 +84,7 @@
       html+='</div></details>';
     }else if(selection.type==='colors'){
       const colors=H.colorSettings(model);
-      html='<p>Выберите готовый оттенок RAL или нажмите цветной образец, чтобы задать свой цвет. Изменения сразу видны на модели и фасадах.</p><div class="fields">';
+      html='<p>Выберите оттенок RAL или Tikkurila либо нажмите цветной образец, чтобы задать свой цвет. Изменения сразу видны на модели и фасадах.</p><div class="fields">';
       for(const [key,label] of Object.entries(colorLabels))html+=colorField(key,label,colors[key]);
       html+='</div><button type="button" id="colors-reset">Вернуть заданную палитру</button>';
     }else if(selection.type==='wall'){
