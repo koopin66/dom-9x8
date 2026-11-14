@@ -99,6 +99,74 @@
       lo:center-thickness/2,hi:center+thickness/2,
       cutLo:Math.min(g.ax.lo,ax.lo),cutHi:Math.max(g.ax.hi,ax.hi)};
   }
+  function roomGeometry(m,floor) {
+    const h=m.house,st=m.stair,byId=id=>m.walls.find(w=>w.id===id);
+    const walls=m.walls.filter(w=>(w.floor===0||w.floor===floor)&&(floor===1||w.roof!=='low'));
+    const maxX=floor===1?h.width:h.split;
+    const xs=[...new Set([0,maxX,h.split,st.x,st.x+st.length,...walls.flatMap(w=>[w.x1,w.x2])].filter(x=>x>=0&&x<=maxX))].sort((a,b)=>a-b);
+    const ys=[...new Set([0,h.depth,h.kitchenDepth,st.y,st.y+st.width,...walls.flatMap(w=>[w.y1,w.y2])].filter(y=>y>=0&&y<=h.depth))].sort((a,b)=>a-b);
+    const nx=xs.length-1,ny=ys.length-1,cells=new Uint8Array(nx*ny);
+    const inStair=(x,y)=>x>st.x&&x<st.x+st.length&&y>st.y&&y<st.y+st.width;
+    for(let j=0;j<ny;j++)for(let i=0;i<nx;i++){
+      const x=(xs[i]+xs[i+1])/2,y=(ys[j]+ys[j+1])/2;
+      const inside=x<h.split||(floor===1&&y<h.kitchenDepth);
+      if(inside&&!walls.some(w=>x>w.x1&&x<w.x2&&y>w.y1&&y<w.y2)&&!(floor===2&&inStair(x,y)))cells[j*nx+i]=1;
+    }
+    const left=byId('left').x2,right=byId('ridge').x1,front=byId('front').y2,back=byId('back').y1;
+    const hints=[];
+    const hint=(name,x1,y1,x2,y2)=>{if(x2>x1&&y2>y1)hints.push({name,x1,y1,x2,y2});};
+    if(floor===1){
+      const b=byId('bath'),u=byId('utility'),ha=byId('hall'),so=byId('south'),cl=byId('store');
+      if(b?.axis==='y'&&u?.axis==='y'&&ha?.axis==='x'){
+        hint('С/у',left,front,b.x1,ha.y1);hint('Тамбур',b.x2,front,u.x1,ha.y1);hint('Техпомещение',u.x2,front,right,ha.y1);
+      }
+      if(ha?.axis==='x'&&so?.axis==='x')hint('Холл и лестница',left,ha.y2,right,so.y1);
+      if(so?.axis==='x'&&cl?.axis==='y'){
+        hint('Кладовая',left,so.y2,cl.x1,back);hint('Спальня',cl.x2,so.y2,right,back);
+      }
+      hint('Кухня-гостиная',h.split,byId('kf').y2,byId('right').x1,byId('kb').y1);
+    }else{
+      const first=byId('upper1'),second=byId('upper2');
+      if(first?.axis==='x')hint('Спальня 1',left,front,right,first.y1);
+      if(first?.axis==='x'&&second?.axis==='x')hint('Холл',left,first.y2,right,second.y1);
+      if(second?.axis==='x')hint('Спальня 2',left,second.y2,right,back);
+    }
+    const rooms=[];
+    for(let start=0;start<cells.length;start++){
+      if(cells[start]!==1)continue;
+      const queue=[start],members=new Set();cells[start]=2;
+      const bounds={x1:Infinity,y1:Infinity,x2:-Infinity,y2:-Infinity},scores=hints.map(()=>0);let area=0;
+      for(let q=0;q<queue.length;q++){
+        const key=queue[q],i=key%nx,j=Math.floor(key/nx),a=(xs[i+1]-xs[i])*(ys[j+1]-ys[j]);members.add(key);area+=a;
+        bounds.x1=Math.min(bounds.x1,xs[i]);bounds.x2=Math.max(bounds.x2,xs[i+1]);bounds.y1=Math.min(bounds.y1,ys[j]);bounds.y2=Math.max(bounds.y2,ys[j+1]);
+        const x=(xs[i]+xs[i+1])/2,y=(ys[j]+ys[j+1])/2;
+        hints.forEach((r,k)=>{if(x>r.x1&&x<r.x2&&y>r.y1&&y<r.y2)scores[k]+=a;});
+        for(const [di,dj] of [[1,0],[-1,0],[0,1],[0,-1]]){
+          const ii=i+di,jj=j+dj,k=jj*nx+ii;
+          if(ii>=0&&ii<nx&&jj>=0&&jj<ny&&cells[k]===1){cells[k]=2;queue.push(k);}
+        }
+      }
+      // Largest free rectangle keeps room text off walls and the stair drawing.
+      let labelBox={...bounds},best=0;const heights=new Array(nx).fill(0);
+      for(let j=0;j<ny;j++){
+        for(let i=0;i<nx;i++)heights[i]=members.has(j*nx+i)&&!inStair((xs[i]+xs[i+1])/2,(ys[j]+ys[j+1])/2)?heights[i]+ys[j+1]-ys[j]:0;
+        const stack=[];
+        for(let i=0;i<=nx;i++){
+          const height=i===nx?0:heights[i];let begin=i;
+          while(stack.length&&stack[stack.length-1].height>height){
+            const item=stack.pop(),a=(xs[i]-xs[item.begin])*item.height;begin=item.begin;
+            if(a>best){best=a;labelBox={x1:xs[item.begin],x2:xs[i],y1:ys[j+1]-item.height,y2:ys[j+1]};}
+          }
+          if(height&&(!stack.length||stack[stack.length-1].height<height))stack.push({begin,height});
+        }
+      }
+      const score=Math.max(0,...scores),name=score>0?hints[scores.indexOf(score)].name:'Помещение';
+      rooms.push({id:'room-'+floor+'-'+rooms.length,name,area:area/1e6,width:bounds.x2-bounds.x1,depth:bounds.y2-bounds.y1,bounds,labelBox});
+    }
+    const counts=new Map();for(const r of rooms)counts.set(r.name,(counts.get(r.name)||0)+1);
+    const indices=new Map();for(const r of rooms)if(counts.get(r.name)>1){const n=(indices.get(r.name)||0)+1;indices.set(r.name,n);r.name+=' '+n;}
+    return rooms;
+  }
   function mapPiece(value,oldBreak,oldEnd,newBreak,newEnd) {
     return value<=oldBreak?value*newBreak/oldBreak:newBreak+(value-oldBreak)*(newEnd-newBreak)/(oldEnd-oldBreak);
   }
@@ -173,7 +241,7 @@
       openings:value.openings.map(o=>pick({thickness:70,...o},Object.keys(openings[0]))),
       stair:pick(value.stair,Object.keys(initial.stair)),porch:pick(value.porch,Object.keys(initial.porch))};
   }
-  const api={initial,clone,round,limits,floorZ,mainTop,lowTop,wallAxis,wallTop,facadeWalls,openingFace,openingGeometry,openingPlacement,resizeHouse,validate,canonical};
+  const api={initial,clone,round,limits,floorZ,mainTop,lowTop,wallAxis,wallTop,facadeWalls,openingFace,openingGeometry,openingPlacement,roomGeometry,resizeHouse,validate,canonical};
   global.HouseModel=api;
   if(typeof module!=='undefined')module.exports=api;
 })(typeof window==='undefined'?globalThis:window);
