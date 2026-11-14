@@ -29,7 +29,8 @@
   const nameField=obj=>`<label class="field wide"><span>Название</span><input name="name" value="${esc(obj.name)}" maxlength="100" required></label>`;
   const colorLabels={roof:'Кровля и козырёк',windowFrames:'Оконные рамы',entranceDoor:'Входная дверь',
     facade:'Фасад',foundation:'Фундамент и цоколь',columns:'Столбы террасы и входа',casings:'Наличники окон и дверей',sills:'Оконные отливы'};
-  const colorPresets=[['#474a51','RAL 7024 · Графитовый серый'],['#383e42','RAL 7016 · Антрацитовый серый'],
+  // RAL 7023 screen value: https://tikkurila.com/colors/concrete-grey-ral-7023
+  const colorPresets=[['#474a51','RAL 7024 · Графитовый серый'],['#84847b','RAL 7023 · Серый бетон'],['#383e42','RAL 7016 · Антрацитовый серый'],
     ['#ddc49a','RAL 1014 · Слоновая кость'],['#e6d2b5','RAL 1015 · Светлая слоновая кость'],
     ['#f6f6f6','RAL 9016 · Транспортный белый'],['#0a0a0a','RAL 9005 · Чёрный']];
   function colorCaption(color){
